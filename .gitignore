@@ -1,0 +1,18 @@
+# local settings and apis
+.streamlit/secrets.toml
+.env
+.env.local
+.env.*.local
+
+# python
+__pycache__/
+.venv/
+venv/
+env/
+
+# Jetbrains IDE
+.idea/
+
+
+# test
+.pytest_cache/
