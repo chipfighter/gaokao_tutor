@@ -16,3 +16,10 @@ env/
 
 # test
 .pytest_cache/
+
+
+# some drafts
+drafts/
+
+# vector store
+chroma_store/
