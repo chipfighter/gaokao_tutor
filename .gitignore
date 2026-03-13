@@ -21,5 +21,5 @@ env/
 # some drafts
 drafts/
 
-# vector store
+# vector store(ChromaDB)
 chroma_store/
