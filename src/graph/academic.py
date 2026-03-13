@@ -1,0 +1,139 @@
+"""SubGraph A — Academic Tutor: keypoint extraction, RAG, web search, answer generation."""
+
+from __future__ import annotations
+
+import json
+import os
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+
+from src.graph.state import TutorState
+from src.prompts.academic import (
+    ACADEMIC_ANSWER_PROMPT,
+    ACADEMIC_SYSTEM_PROMPT,
+    KEYPOINT_EXTRACTION_PROMPT,
+)
+from src.rag.retriever import retrieve
+from src.tools.search_tool import search_tool
+
+
+def _get_llm(**kwargs) -> ChatOpenAI:
+    defaults = dict(
+        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        api_key=os.getenv("DEEPSEEK_API_KEY"),
+        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        temperature=0.7,
+    )
+    defaults.update(kwargs)
+    return ChatOpenAI(**defaults)
+
+
+# ── Node 1: extract keypoints ───────────────────────────────────────
+
+def extract_keypoints(state: TutorState) -> dict:
+    """Extract subject + keypoints from the user question via structured LLM output."""
+    llm = _get_llm(temperature=0.0)
+
+    last_msg = state["messages"][-1]
+    question = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+    prompt = KEYPOINT_EXTRACTION_PROMPT.format(question=question)
+    response = llm.invoke([HumanMessage(content=prompt)])
+
+    try:
+        parsed = json.loads(response.content.strip())
+        subject = parsed.get("subject", "other")
+        keypoints = parsed.get("keypoints", [])
+    except (json.JSONDecodeError, AttributeError):
+        subject = "other"
+        keypoints = []
+
+    return {"subject": subject, "keypoints": keypoints}
+
+
+# ── Node 2: RAG retrieval ───────────────────────────────────────────
+
+def rag_retrieve(state: TutorState) -> dict:
+    """Query ChromaDB with extracted keypoints; populate retrieved_docs."""
+    keypoints = state.get("keypoints", [])
+    subject = state.get("subject")
+    query = " ".join(keypoints) if keypoints else state["messages"][-1].content
+
+    result = retrieve(query=query, subject=subject if subject != "other" else None)
+    return {"retrieved_docs": result["docs"]}
+
+
+def should_web_search(state: TutorState) -> str:
+    """Conditional edge: route to web_search if RAG missed, else generate_answer."""
+    docs = state.get("retrieved_docs", [])
+    if not docs or docs[0].get("score", 0) < 0.3:
+        return "web_search"
+    return "generate_answer"
+
+
+# ── Node 3a: web search (conditional) ───────────────────────────────
+
+def web_search(state: TutorState) -> dict:
+    """Fallback to Tavily when RAG retrieval misses."""
+    last_msg = state["messages"][-1]
+    query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+    try:
+        results = search_tool.invoke(query)
+        if isinstance(results, str):
+            search_results = [{"content": results, "title": "", "url": ""}]
+        else:
+            search_results = [
+                {
+                    "content": r.get("content", ""),
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                }
+                for r in results
+            ]
+    except Exception:
+        search_results = []
+
+    return {"search_results": search_results}
+
+
+# ── Node 3b: generate answer ────────────────────────────────────────
+
+def _format_retrieved(docs: list[dict]) -> str:
+    if not docs:
+        return "无相关参考资料。"
+    parts = []
+    for i, d in enumerate(docs, 1):
+        parts.append(f"[{i}] 来源：{d.get('source', '未知')}（相关度：{d.get('score', 'N/A')}）\n{d.get('content', '')}")
+    return "\n\n".join(parts)
+
+
+def _format_search(results: list[dict]) -> str:
+    if not results:
+        return "无网络搜索结果。"
+    parts = []
+    for i, r in enumerate(results, 1):
+        parts.append(f"[{i}] {r.get('title', '无标题')} ({r.get('url', '')})\n{r.get('content', '')}")
+    return "\n\n".join(parts)
+
+
+def generate_answer(state: TutorState) -> dict:
+    """Synthesize final answer from RAG docs + search results + LLM."""
+    llm = _get_llm()
+
+    last_msg = state["messages"][-1]
+    question = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+    user_prompt = ACADEMIC_ANSWER_PROMPT.format(
+        retrieved_context=_format_retrieved(state.get("retrieved_docs", [])),
+        search_context=_format_search(state.get("search_results", [])),
+        question=question,
+    )
+
+    response = llm.invoke([
+        SystemMessage(content=ACADEMIC_SYSTEM_PROMPT),
+        HumanMessage(content=user_prompt),
+    ])
+
+    return {"messages": [AIMessage(content=response.content)]}
