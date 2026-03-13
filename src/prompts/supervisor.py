@@ -10,7 +10,7 @@ SUPERVISOR_SYSTEM_PROMPT = """\
 
 - **academic**：学科知识问答、题目解析、知识点讲解、考试技巧
 - **planning**：学习计划制定、复习安排、高考政策查询、时间管理
-- **emotional**：情绪倾诉、压力表达、焦虑求助、动力不足
+- **emotional**：情绪倾诉、压力表达、焦虑求助、动力不足、日常寒暄、打招呼、闲聊
 
 ## 输出格式
 
@@ -46,8 +46,18 @@ SUPERVISOR_SYSTEM_PROMPT = """\
 用户：高考志愿填报有什么建议吗
 {"intent": "planning"}
 
+用户：你好
+{"intent": "emotional"}
+
+用户：你是谁？
+{"intent": "emotional"}
+
+用户：谢谢老师
+{"intent": "emotional"}
+
 ## 规则
 
-1. 如果无法确定意图，默认归类为 academic
-2. 只输出 JSON，不要解释
+1. 日常寒暄、打招呼、感谢、闲聊等非学术非规划类输入，归类为 emotional
+2. 只有明确涉及学科知识或题目的才归类为 academic
+3. 只输出 JSON，不要解释
 """

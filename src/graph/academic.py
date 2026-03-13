@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -74,13 +75,19 @@ def should_web_search(state: TutorState) -> str:
 
 # ── Node 3a: web search (conditional) ───────────────────────────────
 
+_SEARCH_TIMEOUT = 15
+
+
 def web_search(state: TutorState) -> dict:
-    """Fallback to Tavily when RAG retrieval misses."""
+    """Fallback to Tavily when RAG retrieval misses. Times out after 15s."""
     last_msg = state["messages"][-1]
     query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
     try:
-        results = get_search_tool().invoke(query)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(get_search_tool().invoke, query)
+            results = future.result(timeout=_SEARCH_TIMEOUT)
+
         if isinstance(results, str):
             search_results = [{"content": results, "title": "", "url": ""}]
         else:
@@ -92,7 +99,7 @@ def web_search(state: TutorState) -> dict:
                 }
                 for r in results
             ]
-    except Exception:
+    except (TimeoutError, Exception):
         search_results = []
 
     return {"search_results": search_results}

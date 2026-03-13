@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -46,13 +47,19 @@ def init_plan(state: TutorState) -> dict:
 
 # ── Node 2: search latest Gaokao policies ───────────────────────────
 
+_SEARCH_TIMEOUT = 15
+
+
 def search_policy(state: TutorState) -> dict:
-    """Use Tavily to fetch the latest Gaokao policy information."""
+    """Use Tavily to fetch the latest Gaokao policy information. Times out after 15s."""
     year = datetime.now().year
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
     try:
-        results = get_search_tool().invoke(query)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(get_search_tool().invoke, query)
+            results = future.result(timeout=_SEARCH_TIMEOUT)
+
         if isinstance(results, str):
             search_results = [{"content": results, "title": "", "url": ""}]
         else:
@@ -64,7 +71,7 @@ def search_policy(state: TutorState) -> dict:
                 }
                 for r in results
             ]
-    except Exception:
+    except (TimeoutError, Exception):
         search_results = []
 
     return {"search_results": search_results}
