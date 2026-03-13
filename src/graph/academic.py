@@ -14,8 +14,8 @@ from src.prompts.academic import (
     ACADEMIC_SYSTEM_PROMPT,
     KEYPOINT_EXTRACTION_PROMPT,
 )
-from src.rag.retriever import retrieve
-from src.tools.search_tool import search_tool
+from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
+from src.tools.search_tool import get_search_tool
 
 
 def _get_llm(**kwargs) -> ChatOpenAI:
@@ -67,7 +67,7 @@ def rag_retrieve(state: TutorState) -> dict:
 def should_web_search(state: TutorState) -> str:
     """Conditional edge: route to web_search if RAG missed, else generate_answer."""
     docs = state.get("retrieved_docs", [])
-    if not docs or docs[0].get("score", 0) < 0.3:
+    if not docs or docs[0].get("score", 0) < RELEVANCE_THRESHOLD:
         return "web_search"
     return "generate_answer"
 
@@ -80,7 +80,7 @@ def web_search(state: TutorState) -> dict:
     query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
     try:
-        results = search_tool.invoke(query)
+        results = get_search_tool().invoke(query)
         if isinstance(results, str):
             search_results = [{"content": results, "title": "", "url": ""}]
         else:

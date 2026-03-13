@@ -9,8 +9,6 @@ import streamlit as st
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
-    from src.graph.state import TutorState
-
 NODE_STATUS_LABELS = {
     "supervisor": "🔍 正在分析你的问题...",
     "extract_keypoints": "📝 提取关键知识点...",
@@ -28,18 +26,18 @@ def stream_graph_to_streamlit(
     graph: CompiledStateGraph,
     user_input: dict[str, list],
     config: dict | None = None,
-) -> dict | None:
+) -> dict:
     """Run the graph in streaming mode and render updates to Streamlit.
 
-    Returns the final state snapshot so the caller can extract retrieved_docs
-    for citation display.
+    Accumulates all node outputs into a merged state dict so the caller
+    can extract retrieved_docs for citation display.
     """
-    final_state: dict | None = None
+    accumulated: dict = {}
 
     status_placeholder = st.status("🚀 处理中...", expanded=False)
     message_placeholder = st.empty()
 
-    for namespace, update in graph.stream(
+    for node_name, update in graph.stream(
         user_input,
         config=config,
         stream_mode="updates",
@@ -47,10 +45,10 @@ def stream_graph_to_streamlit(
         if not isinstance(update, dict):
             continue
 
-        node_name = namespace if isinstance(namespace, str) else str(namespace)
-
         label = NODE_STATUS_LABELS.get(node_name, f"⚙️ {node_name}...")
         status_placeholder.update(label=label)
+
+        accumulated.update(update)
 
         if "messages" in update and update["messages"]:
             last_ai = update["messages"][-1]
@@ -58,8 +56,6 @@ def stream_graph_to_streamlit(
             if content:
                 message_placeholder.markdown(content)
 
-        final_state = update
-
     status_placeholder.update(label="✅ 完成", state="complete")
 
-    return final_state
+    return accumulated

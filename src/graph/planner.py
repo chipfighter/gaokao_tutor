@@ -14,7 +14,7 @@ from src.prompts.planner import (
     PLANNER_REFINE_PROMPT,
     PLANNER_SYSTEM_PROMPT,
 )
-from src.tools.search_tool import search_tool
+from src.tools.search_tool import get_search_tool
 
 
 def _get_llm() -> ChatOpenAI:
@@ -52,7 +52,7 @@ def search_policy(state: TutorState) -> dict:
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
     try:
-        results = search_tool.invoke(query)
+        results = get_search_tool().invoke(query)
         if isinstance(results, str):
             search_results = [{"content": results, "title": "", "url": ""}]
         else:
