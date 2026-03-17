@@ -3,14 +3,12 @@ streamlit>=1.40.0
 langchain>=0.3.0
 langchain-openai>=0.2.0
 langchain-community>=0.3.0
-langchain-huggingface>=0.1.0
 langchain-text-splitters>=0.3.0
 langgraph>=0.2.0
 
 # RAG
 chromadb>=0.5.0
 pymupdf>=1.25.0
-sentence-transformers>=3.0.0
 
 # Web Search
 duckduckgo-search>=7.0.0

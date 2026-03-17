@@ -1,4 +1,8 @@
-"""ChromaDB index builder with incremental upsert support."""
+"""ChromaDB index builder with incremental upsert support.
+
+Uses SiliconFlow's OpenAI-compatible embedding API (BAAI/bge-m3) instead
+of local HuggingFace models, eliminating heavy local dependencies.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +13,10 @@ from typing import Optional
 
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 COLLECTION_NAME = "gaokao_docs"
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -26,9 +30,27 @@ def _resolve_persist_dir(persist_directory: Optional[str] = None) -> str:
     return str(path)
 
 
-def _get_embedding(model_name: Optional[str] = None) -> HuggingFaceEmbeddings:
-    model_name = model_name or os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
-    return HuggingFaceEmbeddings(model_name=model_name)
+def _get_embedding(model_name: Optional[str] = None) -> OpenAIEmbeddings:
+    """Create an OpenAI-compatible embedding client backed by SiliconFlow.
+
+    Args:
+        model_name: Override for the embedding model identifier.
+            Falls back to ``EMBEDDING_MODEL`` env var, then
+            ``DEFAULT_EMBEDDING_MODEL``.
+
+    Returns:
+        A configured ``OpenAIEmbeddings`` instance pointing at SiliconFlow.
+    """
+    model_name = model_name or os.getenv(
+        "EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL
+    )
+    return OpenAIEmbeddings(
+        model=model_name,
+        openai_api_key=os.getenv("SILICONFLOW_API_KEY"),
+        openai_api_base=os.getenv(
+            "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"
+        ),
+    )
 
 
 def _content_id(doc: Document) -> str:
@@ -45,6 +67,14 @@ def build_index(
     """Create (or update) a ChromaDB collection from *documents*.
 
     Uses md5 hash of chunk content as the dedup id so repeated runs are safe.
+
+    Args:
+        documents: List of LangChain Document objects to index.
+        persist_directory: Override for the ChromaDB persistence path.
+        embedding_model: Override for the embedding model identifier.
+
+    Returns:
+        The populated Chroma vectorstore instance.
     """
     persist_directory = _resolve_persist_dir(persist_directory)
     embedding = _get_embedding(embedding_model)
@@ -65,7 +95,15 @@ def load_index(
     persist_directory: Optional[str] = None,
     embedding_model: Optional[str] = None,
 ) -> Chroma:
-    """Load an existing ChromaDB collection from disk."""
+    """Load an existing ChromaDB collection from disk.
+
+    Args:
+        persist_directory: Override for the ChromaDB persistence path.
+        embedding_model: Override for the embedding model identifier.
+
+    Returns:
+        The loaded Chroma vectorstore instance.
+    """
     persist_directory = _resolve_persist_dir(persist_directory)
     embedding = _get_embedding(embedding_model)
 
