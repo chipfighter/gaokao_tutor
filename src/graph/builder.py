@@ -11,7 +11,7 @@ from src.graph.academic import (
     web_search,
 )
 from src.graph.emotional import emotional_response
-from src.graph.planner import init_plan, refine_plan, search_policy
+from src.graph.planner import generate_plan, search_policy
 from src.graph.state import TutorState
 from src.graph.supervisor import route_by_intent, supervisor_node
 
@@ -29,10 +29,9 @@ def build_graph() -> StateGraph:
     graph.add_node("web_search", web_search)
     graph.add_node("generate_answer", generate_answer)
 
-    # SubGraph B — Planner
-    graph.add_node("init_plan", init_plan)
+    # SubGraph B — Planner (search first, then single-call plan)
     graph.add_node("search_policy", search_policy)
-    graph.add_node("refine_plan", refine_plan)
+    graph.add_node("generate_plan", generate_plan)
 
     # Emotional
     graph.add_node("emotional_response", emotional_response)
@@ -46,12 +45,12 @@ def build_graph() -> StateGraph:
         route_by_intent,
         {
             "academic": "rag_retrieve",
-            "planning": "init_plan",
+            "planning": "search_policy",
             "emotional": "emotional_response",
         },
     )
 
-    # Academic flow (supervisor already extracted keypoints)
+    # Academic flow
     graph.add_conditional_edges(
         "rag_retrieve",
         should_web_search,
@@ -63,10 +62,9 @@ def build_graph() -> StateGraph:
     graph.add_edge("web_search", "generate_answer")
     graph.add_edge("generate_answer", END)
 
-    # Planner flow
-    graph.add_edge("init_plan", "search_policy")
-    graph.add_edge("search_policy", "refine_plan")
-    graph.add_edge("refine_plan", END)
+    # Planner flow (search → generate in 2 steps)
+    graph.add_edge("search_policy", "generate_plan")
+    graph.add_edge("generate_plan", END)
 
     # Emotional — direct to END
     graph.add_edge("emotional_response", END)

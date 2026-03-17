@@ -5,8 +5,7 @@ from src.prompts.academic import (
 )
 from src.prompts.planner import (
     PLANNER_SYSTEM_PROMPT,
-    PLANNER_INIT_PROMPT,
-    PLANNER_REFINE_PROMPT,
+    PLANNER_GENERATE_PROMPT,
 )
 from src.prompts.emotional import EMOTIONAL_SYSTEM_PROMPT
 
@@ -15,7 +14,6 @@ __all__ = [
     "ACADEMIC_SYSTEM_PROMPT",
     "ACADEMIC_ANSWER_PROMPT",
     "PLANNER_SYSTEM_PROMPT",
-    "PLANNER_INIT_PROMPT",
-    "PLANNER_REFINE_PROMPT",
+    "PLANNER_GENERATE_PROMPT",
     "EMOTIONAL_SYSTEM_PROMPT",
 ]

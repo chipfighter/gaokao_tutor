@@ -1,6 +1,7 @@
 """Study planner prompt — personalized study plan generation.
 
-Note: This prompt is for MVP, so I use the hard coding method to implement it.
+Merged into a single-call pattern: policy info is gathered first via web
+search, then fed alongside the user request into one LLM call.
 """
 
 PLANNER_SYSTEM_PROMPT = """\
@@ -23,28 +24,20 @@ PLANNER_SYSTEM_PROMPT = """\
 使用 Markdown 任务列表格式，结构清晰，便于学生逐项勾选执行。
 """
 
-PLANNER_INIT_PROMPT = """\
-学生的需求：{user_request}
+PLANNER_GENERATE_PROMPT = """\
+## 学生需求
 
-请根据学生的描述，生成一份初步的学习计划草案。使用 Markdown 格式输出，包含：
-1. 计划概览（目标总结）
-2. 按时间维度的详细任务列表
-3. 每日学习时间建议
-"""
-
-PLANNER_REFINE_PROMPT = """\
-## 初步计划
-
-{draft_plan}
+{user_request}
 
 ## 最新高考政策信息
 
 {policy_info}
 
-请结合最新的高考政策信息，对计划进行优化和修正：
-1. 根据考试时间调整复习节奏
-2. 根据政策变化调整科目侧重
-3. 确保计划的时效性和针对性
+请根据学生的需求，结合最新高考政策信息，生成一份完整的学习计划。包含：
+1. 计划概览（目标总结）
+2. 按时间维度的详细任务列表
+3. 每日学习时间建议
+4. 根据政策变化的特别提醒（如有）
 
-输出最终版本的完整学习计划（Markdown 格式）。
+使用 Markdown 格式输出。
 """

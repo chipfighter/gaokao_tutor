@@ -14,9 +14,8 @@ NODE_STATUS_LABELS = {
     "rag_retrieve": "📚 在知识库中检索...",
     "web_search": "🌐 搜索网络获取最新信息...",
     "generate_answer": "✍️ 正在生成解答...",
-    "init_plan": "📋 正在制定学习计划...",
     "search_policy": "🔎 查询最新高考政策...",
-    "refine_plan": "📋 优化学习计划中...",
+    "generate_plan": "📋 正在制定学习计划...",
     "emotional_response": "💬 正在回复...",
 }
 
