@@ -16,7 +16,7 @@ from src.prompts.academic import (
     KEYPOINT_EXTRACTION_PROMPT,
 )
 from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
-from src.tools.search_tool import get_search_tool
+from src.tools.search_tool import search as web_search_fn
 
 
 def _get_llm(**kwargs) -> ChatOpenAI:
@@ -79,26 +79,14 @@ _SEARCH_TIMEOUT = 15
 
 
 def web_search(state: TutorState) -> dict:
-    """Fallback to Tavily when RAG retrieval misses. Times out after 15s."""
+    """Fallback to DuckDuckGo when RAG retrieval misses. Times out after 15s."""
     last_msg = state["messages"][-1]
     query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(get_search_tool().invoke, query)
-            results = future.result(timeout=_SEARCH_TIMEOUT)
-
-        if isinstance(results, str):
-            search_results = [{"content": results, "title": "", "url": ""}]
-        else:
-            search_results = [
-                {
-                    "content": r.get("content", ""),
-                    "title": r.get("title", ""),
-                    "url": r.get("url", ""),
-                }
-                for r in results
-            ]
+            future = pool.submit(web_search_fn, query)
+            search_results = future.result(timeout=_SEARCH_TIMEOUT)
     except (TimeoutError, Exception):
         search_results = []
 

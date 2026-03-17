@@ -15,7 +15,7 @@ from src.prompts.planner import (
     PLANNER_REFINE_PROMPT,
     PLANNER_SYSTEM_PROMPT,
 )
-from src.tools.search_tool import get_search_tool
+from src.tools.search_tool import search as web_search_fn
 
 
 def _get_llm() -> ChatOpenAI:
@@ -51,26 +51,14 @@ _SEARCH_TIMEOUT = 15
 
 
 def search_policy(state: TutorState) -> dict:
-    """Use Tavily to fetch the latest Gaokao policy information. Times out after 15s."""
+    """Use DuckDuckGo to fetch the latest Gaokao policy information. Times out after 15s."""
     year = datetime.now().year
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(get_search_tool().invoke, query)
-            results = future.result(timeout=_SEARCH_TIMEOUT)
-
-        if isinstance(results, str):
-            search_results = [{"content": results, "title": "", "url": ""}]
-        else:
-            search_results = [
-                {
-                    "content": r.get("content", ""),
-                    "title": r.get("title", ""),
-                    "url": r.get("url", ""),
-                }
-                for r in results
-            ]
+            future = pool.submit(web_search_fn, query)
+            search_results = future.result(timeout=_SEARCH_TIMEOUT)
     except (TimeoutError, Exception):
         search_results = []
 
