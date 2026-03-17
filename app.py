@@ -1,6 +1,5 @@
 """Gaokao Tutor — AI-powered tutoring assistant for Chinese Gaokao preparation."""
 
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -48,11 +47,6 @@ footer {visibility: hidden;}
 /* Sidebar styling — Gemini-inspired light palette */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #f0f4f9 0%, #e8ecf1 100%);
-}
-section[data-testid="stSidebar"] .stSelectbox label,
-section[data-testid="stSidebar"] .stRadio label {
-    font-weight: 500;
-    color: #333 !important;
 }
 
 /* Expander (citations) styling */
@@ -166,30 +160,9 @@ with st.sidebar:
 
     st.divider()
 
-    subject = st.selectbox(
-        "📖 科目",
-        options=["自动识别", "数学", "语文"],
-        index=0,
-    )
-
-    mode = st.radio(
-        "💡 模式",
-        options=["智能问答", "学习规划"],
-        index=0,
-        horizontal=True,
-    )
-
-    st.divider()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🗑️ 清空", use_container_width=True):
-            st.session_state.messages = []
-            st.rerun()
-    with col2:
-        if st.button("🔄 重载", use_container_width=True, help="重新加载 LangGraph"):
-            del st.session_state["graph"]
-            st.rerun()
+    if st.button("🗑️ 清空对话", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
     st.divider()
 
@@ -210,8 +183,6 @@ with st.sidebar:
 
 # ── Main area ────────────────────────────────────────────────────────
 
-_SUBJECT_MAP = {"自动识别": None, "数学": "math", "语文": "chinese"}
-
 if not st.session_state.messages:
     st.markdown(
         """
@@ -219,10 +190,10 @@ if not st.session_state.messages:
     <div class="hero-title">高考辅导 AI 助手</div>
     <div class="hero-subtitle">学科答疑 · 学习规划 · 情绪支持</div>
     <div class="feature-pills">
-        <span class="pill">📚 RAG 知识检索</span>
-        <span class="pill">🌐 实时网络搜索</span>
-        <span class="pill">🧠 多智能体协作</span>
-        <span class="pill">💬 流式输出</span>
+        <span class="pill">🔬 智能答疑</span>
+        <span class="pill">📅 学习规划</span>
+        <span class="pill">💪 心理支持</span>
+        <span class="pill">🌐 实时搜索</span>
     </div>
 </div>
 <div class="quick-actions">
