@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
 NODE_STATUS_LABELS = {
     "supervisor": "🔍 正在分析你的问题...",
-    "extract_keypoints": "📝 提取关键知识点...",
     "rag_retrieve": "📚 在知识库中检索...",
     "web_search": "🌐 搜索网络获取最新信息...",
     "generate_answer": "✍️ 正在生成解答...",

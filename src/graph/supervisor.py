@@ -1,4 +1,8 @@
-"""Supervisor node — LLM-based intent classification and routing."""
+"""Supervisor node — LLM-based intent classification, subject detection, and keypoint extraction.
+
+Combines routing and academic keypoint extraction into a single LLM call
+to eliminate a redundant API roundtrip on the academic path.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +28,11 @@ def _get_llm() -> ChatOpenAI:
 
 
 def supervisor_node(state: TutorState) -> dict:
-    """Classify the latest user message into an intent category."""
+    """Classify intent, detect subject, and extract keypoints in one LLM call.
+
+    Returns:
+        Dict with ``intent``, ``subject``, and ``keypoints`` for state update.
+    """
     llm = _get_llm()
 
     last_msg = state["messages"][-1]
@@ -38,13 +46,17 @@ def supervisor_node(state: TutorState) -> dict:
     try:
         parsed = json.loads(response.content.strip())
         intent = parsed.get("intent", "academic")
+        subject = parsed.get("subject", "other")
+        keypoints = parsed.get("keypoints", [])
     except (json.JSONDecodeError, AttributeError):
         intent = "academic"
+        subject = "other"
+        keypoints = []
 
     if intent not in _VALID_INTENTS:
         intent = "academic"
 
-    return {"intent": intent}
+    return {"intent": intent, "subject": subject, "keypoints": keypoints}
 
 
 def route_by_intent(state: TutorState) -> str:

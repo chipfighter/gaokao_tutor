@@ -5,7 +5,6 @@ from __future__ import annotations
 from langgraph.graph import END, StateGraph
 
 from src.graph.academic import (
-    extract_keypoints,
     generate_answer,
     rag_retrieve,
     should_web_search,
@@ -25,8 +24,7 @@ def build_graph() -> StateGraph:
     # ── Nodes ────────────────────────────────────────────────────────
     graph.add_node("supervisor", supervisor_node)
 
-    # SubGraph A — Academic
-    graph.add_node("extract_keypoints", extract_keypoints)
+    # SubGraph A — Academic (keypoints extracted by supervisor)
     graph.add_node("rag_retrieve", rag_retrieve)
     graph.add_node("web_search", web_search)
     graph.add_node("generate_answer", generate_answer)
@@ -47,14 +45,13 @@ def build_graph() -> StateGraph:
         "supervisor",
         route_by_intent,
         {
-            "academic": "extract_keypoints",
+            "academic": "rag_retrieve",
             "planning": "init_plan",
             "emotional": "emotional_response",
         },
     )
 
-    # Academic flow
-    graph.add_edge("extract_keypoints", "rag_retrieve")
+    # Academic flow (supervisor already extracted keypoints)
     graph.add_conditional_edges(
         "rag_retrieve",
         should_web_search,

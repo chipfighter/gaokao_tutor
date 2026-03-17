@@ -1,8 +1,11 @@
-"""SubGraph A — Academic Tutor: keypoint extraction, RAG, web search, answer generation."""
+"""SubGraph A — Academic Tutor: RAG retrieval, web search fallback, answer generation.
+
+Keypoint extraction is handled by the supervisor node (merged for latency),
+so this subgraph starts directly at RAG retrieval.
+"""
 
 from __future__ import annotations
 
-import json
 import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
@@ -10,11 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.graph.state import TutorState
-from src.prompts.academic import (
-    ACADEMIC_ANSWER_PROMPT,
-    ACADEMIC_SYSTEM_PROMPT,
-    KEYPOINT_EXTRACTION_PROMPT,
-)
+from src.prompts.academic import ACADEMIC_ANSWER_PROMPT, ACADEMIC_SYSTEM_PROMPT
 from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
 from src.tools.search_tool import search as web_search_fn
 
@@ -30,33 +29,10 @@ def _get_llm(**kwargs) -> ChatOpenAI:
     return ChatOpenAI(**defaults)
 
 
-# ── Node 1: extract keypoints ───────────────────────────────────────
-
-def extract_keypoints(state: TutorState) -> dict:
-    """Extract subject + keypoints from the user question via structured LLM output."""
-    llm = _get_llm(temperature=0.0)
-
-    last_msg = state["messages"][-1]
-    question = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-
-    prompt = KEYPOINT_EXTRACTION_PROMPT.format(question=question)
-    response = llm.invoke([HumanMessage(content=prompt)])
-
-    try:
-        parsed = json.loads(response.content.strip())
-        subject = parsed.get("subject", "other")
-        keypoints = parsed.get("keypoints", [])
-    except (json.JSONDecodeError, AttributeError):
-        subject = "other"
-        keypoints = []
-
-    return {"subject": subject, "keypoints": keypoints}
-
-
-# ── Node 2: RAG retrieval ───────────────────────────────────────────
+# ── Node 1: RAG retrieval ─────────────────────────────────────────
 
 def rag_retrieve(state: TutorState) -> dict:
-    """Query ChromaDB with extracted keypoints; populate retrieved_docs."""
+    """Query ChromaDB with keypoints extracted by the supervisor node."""
     keypoints = state.get("keypoints", [])
     subject = state.get("subject")
     query = " ".join(keypoints) if keypoints else state["messages"][-1].content
@@ -73,7 +49,7 @@ def should_web_search(state: TutorState) -> str:
     return "generate_answer"
 
 
-# ── Node 3a: web search (conditional) ───────────────────────────────
+# ── Node 2: web search (conditional) ──────────────────────────────
 
 _SEARCH_TIMEOUT = 15
 
@@ -93,7 +69,7 @@ def web_search(state: TutorState) -> dict:
     return {"search_results": search_results}
 
 
-# ── Node 3b: generate answer ────────────────────────────────────────
+# ── Node 3: generate answer ──────────────────────────────────────
 
 def _format_retrieved(docs: list[dict]) -> str:
     if not docs:

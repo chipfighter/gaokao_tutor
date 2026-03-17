@@ -2,7 +2,6 @@ from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.prompts.academic import (
     ACADEMIC_SYSTEM_PROMPT,
     ACADEMIC_ANSWER_PROMPT,
-    KEYPOINT_EXTRACTION_PROMPT,
 )
 from src.prompts.planner import (
     PLANNER_SYSTEM_PROMPT,
@@ -15,7 +14,6 @@ __all__ = [
     "SUPERVISOR_SYSTEM_PROMPT",
     "ACADEMIC_SYSTEM_PROMPT",
     "ACADEMIC_ANSWER_PROMPT",
-    "KEYPOINT_EXTRACTION_PROMPT",
     "PLANNER_SYSTEM_PROMPT",
     "PLANNER_INIT_PROMPT",
     "PLANNER_REFINE_PROMPT",

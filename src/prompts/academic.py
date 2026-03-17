@@ -1,7 +1,9 @@
 """Academic tutor prompt — subject knowledge Q&A and exam problem analysis.
 
-Note: This prompt is for MVP, so I use the hard coding method to implement it.
+Keypoint extraction has been merged into the supervisor prompt for latency
+optimization. This module only contains answer-generation prompts.
 """
+
 
 ACADEMIC_SYSTEM_PROMPT = """\
 你是一位经验丰富的高考学科辅导老师，拥有超过 20 年的高中教学经验，精通数学、语文等高考核心科目。
@@ -41,16 +43,3 @@ ACADEMIC_ANSWER_PROMPT = """\
 请根据以上参考资料和搜索结果，为学生提供详尽的解答。如果参考资料不足以回答，请基于你的专业知识补充，但要明确标注哪些是来自资料、哪些是你的补充。
 """
 
-KEYPOINT_EXTRACTION_PROMPT = """\
-分析以下学生提问，提取结构化信息。严格以 JSON 格式输出，不要输出其他内容。
-
-学生提问：{question}
-
-输出格式：
-{{"subject": "math|chinese|other", "keypoints": ["知识点1", "知识点2"], "question_type": "概念理解|解题方法|题目解析|考试技巧"}}
-
-规则：
-1. subject 只能是 math、chinese 或 other
-2. keypoints 提取 1-3 个核心知识点关键词
-3. 如果无法确定学科，设为 other
-"""
