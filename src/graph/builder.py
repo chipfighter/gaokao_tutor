@@ -19,6 +19,7 @@ from src.graph.supervisor import route_by_intent, supervisor_node
 def build_graph() -> StateGraph:
     """Construct the full LangGraph StateGraph (uncompiled)."""
 
+    # Build graph
     graph = StateGraph(TutorState)
 
     # ── Nodes ────────────────────────────────────────────────────────
@@ -36,13 +37,14 @@ def build_graph() -> StateGraph:
     # Emotional
     graph.add_node("emotional_response", emotional_response)
 
-    # ── Edges ────────────────────────────────────────────────────────
 
+    # ── Edges ────────────────────────────────────────────────────────
     graph.set_entry_point("supervisor")
 
+    # Conditional fork edges
     graph.add_conditional_edges(
         "supervisor",
-        route_by_intent,
+        route_by_intent,    # judge users intent
         {
             "academic": "rag_retrieve",
             "planning": "search_policy",
@@ -53,7 +55,7 @@ def build_graph() -> StateGraph:
     # Academic flow
     graph.add_conditional_edges(
         "rag_retrieve",
-        should_web_search,
+        should_web_search,  # judge whether to search the web
         {
             "web_search": "web_search",
             "generate_answer": "generate_answer",

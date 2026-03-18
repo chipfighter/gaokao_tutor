@@ -23,3 +23,9 @@ drafts/
 
 # vector store(ChromaDB)
 chroma_store/
+
+# my learning notes
+learning_notes/
+
+# logs
+logs/

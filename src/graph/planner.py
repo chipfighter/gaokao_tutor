@@ -1,7 +1,15 @@
 """SubGraph B — Study Planner: policy search, then single-call plan generation.
 
-Optimized from 3-step (init → search → refine) to 2-step (search → generate)
-to eliminate one LLM roundtrip.
+Notes:
+- 2-step (search → generate)
+
+Future Roadmap:
+- [Local RAG] Replace/Augment web search with a VectorDB (ChromaDB) containing
+  official PDF documents from provincial education examination authorities.
+- [Context Filtering] Implement a re-ranking stage to prioritize official
+  .gov.cn domains over social media/marketing content.
+- [Provincial Routing] Automatically inject user's provincial context into
+  search queries to handle diverse Gaokao schemas (e.g., 3+1+2 vs. 3+3).
 """
 
 from __future__ import annotations
@@ -29,11 +37,13 @@ def _get_llm() -> ChatOpenAI:
 
 # ── Node 1: search latest Gaokao policies ─────────────────────────
 
+# Time Limit to prevent search too long
 _SEARCH_TIMEOUT = 15
 
 
 def search_policy(state: TutorState) -> dict:
     """Use DuckDuckGo to fetch the latest Gaokao policy information. Times out after 15s."""
+    # TODO: Need to change the hardcode search context with dynamic query.
     year = datetime.now().year
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
