@@ -74,6 +74,11 @@ def build_graph() -> StateGraph:
     return graph
 
 
-def get_compiled_graph():
-    """Build and compile the graph, ready for invocation."""
-    return build_graph().compile()
+def get_compiled_graph(checkpointer=None):
+    """Build and compile the graph, ready for invocation.
+
+    Args:
+        checkpointer: Optional LangGraph checkpointer for persistent state.
+                      When provided, the graph saves/restores state per thread_id.
+    """
+    return build_graph().compile(checkpointer=checkpointer)
