@@ -78,6 +78,17 @@ app.add_middleware(
 
 ALLOWED_NODES = {"generate_answer", "generate_plan", "emotional_response"}
 
+# All graph nodes whose lifecycle (start/end) we broadcast to the frontend.
+GRAPH_NODES = {
+    "supervisor",
+    "rag_retrieve",
+    "web_search",
+    "generate_answer",
+    "search_policy",
+    "generate_plan",
+    "emotional_response",
+}
+
 
 async def generate_sse(
     query: str,
@@ -85,18 +96,39 @@ async def generate_sse(
 ) -> AsyncGenerator[str, None]:
     """Stream LangGraph events as Server-Sent Events (SSE).
 
+    Yields two SSE payload types:
+
+    * ``{"type": "node_event", "status": "start"|"end", "node": "<name>"}``
+      — emitted when a graph node begins or finishes execution.
+    * ``{"type": "token", "content": "<text>"}``
+      — emitted for each streamed token from an allowed LLM node.
+
     Args:
         query: The user-provided string to be processed by the graph.
         thread_id: Optional session ID for multi-turn memory. Auto-generated if None.
-
-    Yields:
-        SSE-formatted strings containing streaming tokens.
     """
     config = make_thread_config(thread_id)
     state_input = {"messages": [HumanMessage(content=query)]}
 
     async for event in graph.astream_events(state_input, config=config, version="v2"):
-        if event["event"] == "on_chat_model_stream":
+        event_type = event["event"]
+
+        # ── Node lifecycle events ──────────────────────────────────────
+        if event_type in ("on_chain_start", "on_chain_end"):
+            node_name = event.get("name")
+            meta_node = event.get("metadata", {}).get("langgraph_node")
+            # Only emit for top-level graph nodes (name matches metadata),
+            # not for internal sub-chains (RunnableSequence, etc.).
+            if node_name and node_name == meta_node and node_name in GRAPH_NODES:
+                status = "start" if event_type == "on_chain_start" else "end"
+                payload = json.dumps(
+                    {"type": "node_event", "status": status, "node": node_name},
+                    ensure_ascii=False,
+                )
+                yield f"data: {payload}\n\n"
+
+        # ── Token streaming ────────────────────────────────────────────
+        elif event_type == "on_chat_model_stream":
             node_name = event.get("metadata", {}).get("langgraph_node")
             if node_name in ALLOWED_NODES:
                 chunk = event["data"]["chunk"]
