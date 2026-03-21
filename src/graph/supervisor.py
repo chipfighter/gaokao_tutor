@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 
 from src.graph.state import TutorState
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
+from src.tracing import traced_llm_call, traced_node
 
 _VALID_INTENTS = {"academic", "planning", "emotional"}
 
@@ -27,6 +28,7 @@ def _get_llm() -> ChatOpenAI:
     )
 
 
+@traced_node
 def supervisor_node(state: TutorState) -> dict:
     """Classify intent, detect subject, and extract keypoints in one LLM call.
 
@@ -38,10 +40,15 @@ def supervisor_node(state: TutorState) -> dict:
     last_msg = state["messages"][-1]
     user_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
-    response = llm.invoke([
-        SystemMessage(content=SUPERVISOR_SYSTEM_PROMPT),
-        HumanMessage(content=user_text),
-    ])
+    with traced_llm_call(
+        model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        node_name="supervisor",
+        temperature=0.0,
+    ):
+        response = llm.invoke([
+            SystemMessage(content=SUPERVISOR_SYSTEM_PROMPT),
+            HumanMessage(content=user_text),
+        ])
 
     try:
         parsed = json.loads(response.content.strip())

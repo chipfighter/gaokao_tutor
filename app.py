@@ -13,9 +13,17 @@ from langchain_core.messages import HumanMessage
 
 load_dotenv(Path(__file__).parent / ".env")
 
+from src.tracing import setup_tracing, shutdown_tracing
+
+setup_tracing()
+
 from src.graph.builder import get_compiled_graph
 
 app = FastAPI(title="Gaokao Tutor API")
+
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+FastAPIInstrumentor.instrument_app(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +78,12 @@ async def stream_endpoint(request: ChatRequest):
         generate_sse(request.query),
         media_type="text/event-stream"
     )
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    """Flush pending spans and shut down the tracing provider."""
+    shutdown_tracing()
+
 
 if __name__ == "__main__":
     import uvicorn

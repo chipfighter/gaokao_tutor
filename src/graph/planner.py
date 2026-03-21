@@ -24,6 +24,7 @@ from langchain_openai import ChatOpenAI
 from src.graph.state import TutorState
 from src.prompts.planner import PLANNER_GENERATE_PROMPT, PLANNER_SYSTEM_PROMPT
 from src.tools.search_tool import search as web_search_fn
+from src.tracing import traced_llm_call, traced_node, traced_search
 
 
 def _get_llm() -> ChatOpenAI:
@@ -41,24 +42,35 @@ def _get_llm() -> ChatOpenAI:
 _SEARCH_TIMEOUT = 15
 
 
+@traced_node
 def search_policy(state: TutorState) -> dict:
     """Use DuckDuckGo to fetch the latest Gaokao policy information. Times out after 15s."""
     # TODO: Need to change the hardcode search context with dynamic query.
     year = datetime.now().year
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
-    try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(web_search_fn, query)
-            search_results = future.result(timeout=_SEARCH_TIMEOUT)
-    except (TimeoutError, Exception):
-        search_results = []
+    with traced_search(query=query, timeout=_SEARCH_TIMEOUT) as span:
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(web_search_fn, query)
+                search_results = future.result(timeout=_SEARCH_TIMEOUT)
+            span.set_attribute("search.result_count", len(search_results))
+            span.set_attribute("search.timed_out", False)
+        except TimeoutError:
+            search_results = []
+            span.set_attribute("search.result_count", 0)
+            span.set_attribute("search.timed_out", True)
+        except Exception:
+            search_results = []
+            span.set_attribute("search.result_count", 0)
+            span.set_attribute("search.timed_out", False)
 
     return {"search_results": search_results}
 
 
 # ── Node 2: generate complete plan ────────────────────────────────
 
+@traced_node
 def generate_plan(state: TutorState) -> dict:
     """Produce a complete study plan from user request + policy context in one LLM call."""
     llm = _get_llm()
@@ -77,9 +89,14 @@ def generate_plan(state: TutorState) -> dict:
         policy_info=policy_info,
     )
 
-    response = llm.invoke([
-        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
-        HumanMessage(content=prompt),
-    ])
+    with traced_llm_call(
+        model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        node_name="generate_plan",
+        temperature=0.7,
+    ):
+        response = llm.invoke([
+            SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+            HumanMessage(content=prompt),
+        ])
 
     return {"messages": [AIMessage(content=response.content)]}

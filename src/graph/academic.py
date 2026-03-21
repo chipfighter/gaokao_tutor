@@ -16,6 +16,7 @@ from src.graph.state import TutorState
 from src.prompts.academic import ACADEMIC_ANSWER_PROMPT, ACADEMIC_SYSTEM_PROMPT
 from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
 from src.tools.search_tool import search as web_search_fn
+from src.tracing import traced_llm_call, traced_node, traced_retrieval, traced_search
 
 
 def _get_llm(**kwargs) -> ChatOpenAI:
@@ -31,13 +32,20 @@ def _get_llm(**kwargs) -> ChatOpenAI:
 
 # ── Node 1: RAG retrieval ─────────────────────────────────────────
 
+@traced_node
 def rag_retrieve(state: TutorState) -> dict:
     """Query ChromaDB with keypoints extracted by the supervisor node."""
     keypoints = state.get("keypoints", [])
     subject = state.get("subject")
     query = " ".join(keypoints) if keypoints else state["messages"][-1].content
 
-    result = retrieve(query=query, subject=subject if subject != "other" else None)
+    with traced_retrieval(query=query, subject=subject if subject != "other" else None) as span:
+        result = retrieve(query=query, subject=subject if subject != "other" else None)
+        span.set_attribute("rag.doc_count", len(result.get("docs", [])))
+        span.set_attribute("rag.is_hit", result.get("is_hit", False))
+        if result.get("docs"):
+            span.set_attribute("rag.top_score", result["docs"][0].get("score", 0))
+
     return {"retrieved_docs": result["docs"]}
 
 
@@ -54,17 +62,27 @@ def should_web_search(state: TutorState) -> str:
 _SEARCH_TIMEOUT = 15
 
 
+@traced_node
 def web_search(state: TutorState) -> dict:
     """Fallback to DuckDuckGo when RAG retrieval misses. Times out after 15s."""
     last_msg = state["messages"][-1]
     query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
-    try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(web_search_fn, query)
-            search_results = future.result(timeout=_SEARCH_TIMEOUT)
-    except (TimeoutError, Exception):
-        search_results = []
+    with traced_search(query=query, timeout=_SEARCH_TIMEOUT) as span:
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(web_search_fn, query)
+                search_results = future.result(timeout=_SEARCH_TIMEOUT)
+            span.set_attribute("search.result_count", len(search_results))
+            span.set_attribute("search.timed_out", False)
+        except TimeoutError:
+            search_results = []
+            span.set_attribute("search.result_count", 0)
+            span.set_attribute("search.timed_out", True)
+        except Exception:
+            search_results = []
+            span.set_attribute("search.result_count", 0)
+            span.set_attribute("search.timed_out", False)
 
     return {"search_results": search_results}
 
@@ -89,6 +107,7 @@ def _format_search(results: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+@traced_node
 def generate_answer(state: TutorState) -> dict:
     """Synthesize final answer from RAG docs + search results + LLM."""
     llm = _get_llm()
@@ -102,9 +121,14 @@ def generate_answer(state: TutorState) -> dict:
         question=question,
     )
 
-    response = llm.invoke([
-        SystemMessage(content=ACADEMIC_SYSTEM_PROMPT),
-        HumanMessage(content=user_prompt),
-    ])
+    with traced_llm_call(
+        model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        node_name="generate_answer",
+        temperature=0.7,
+    ):
+        response = llm.invoke([
+            SystemMessage(content=ACADEMIC_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ])
 
     return {"messages": [AIMessage(content=response.content)]}

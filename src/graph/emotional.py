@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 
 from src.graph.state import TutorState
 from src.prompts.emotional import EMOTIONAL_SYSTEM_PROMPT
+from src.tracing import traced_llm_call, traced_node
 
 
 def _get_llm() -> ChatOpenAI:
@@ -20,6 +21,7 @@ def _get_llm() -> ChatOpenAI:
     )
 
 
+@traced_node
 def emotional_response(state: TutorState) -> dict:
     """Respond with warm, practical emotional support."""
     llm = _get_llm()
@@ -28,6 +30,11 @@ def emotional_response(state: TutorState) -> dict:
     for msg in state["messages"]:
         history.append(msg)
 
-    response = llm.invoke(history)
+    with traced_llm_call(
+        model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        node_name="emotional_response",
+        temperature=0.8,
+    ):
+        response = llm.invoke(history)
 
     return {"messages": [AIMessage(content=response.content)]}

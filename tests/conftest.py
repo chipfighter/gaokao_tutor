@@ -12,6 +12,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.util._once import Once
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -75,3 +80,23 @@ def sample_search_results():
         {"content": "2026年高考时间为6月7日-8日。", "title": "高考时间", "url": "https://example.com/1"},
         {"content": "新高考改革3+1+2模式。", "title": "高考改革", "url": "https://example.com/2"},
     ]
+
+
+def _reset_trace_provider():
+    """Force-reset the global TracerProvider so tests can set their own."""
+    trace._TRACER_PROVIDER_SET_ONCE = Once()
+    trace._TRACER_PROVIDER = None
+
+
+@pytest.fixture
+def in_memory_exporter():
+    """Provide an InMemorySpanExporter for capturing spans in tests."""
+    _reset_trace_provider()
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+    yield exporter
+    exporter.clear()
+    provider.shutdown()
+    _reset_trace_provider()
