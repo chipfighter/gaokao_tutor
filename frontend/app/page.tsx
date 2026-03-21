@@ -67,13 +67,35 @@ export default function Home() {
         { id: assistantMessageId, role: "assistant", content: "" }
       ]);
 
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value, { stream: true });
-        // Parse the SSE data format here (e.g., event: token, data: "xxx")
-        // Then update messages and logs in a streaming manner
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+        
+        for (const part of parts) {
+          if (part.startsWith("data: ")) {
+            const dataStr = part.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.type === "token") {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: msg.content + data.content }
+                      : msg
+                  )
+                );
+              }
+            } catch (err) {
+              // Ignore partial or malformed JSON chunks
+            }
+          }
+        }
       }
 
     } catch (error: any) {

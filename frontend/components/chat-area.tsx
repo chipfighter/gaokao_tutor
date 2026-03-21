@@ -107,7 +107,7 @@ export function ChatArea({ messages, onSendMessage, isLoading }: ChatAreaProps) 
               <MessageBubble key={message.id} message={message} />
             ))
           )}
-          {isLoading && (
+          {isLoading && messages[messages.length - 1]?.role === "user" && (
             <div className="flex items-start gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3D5A40]/10 text-[#3D5A40] flex-shrink-0">
                 <Bot className="h-4 w-4" />
