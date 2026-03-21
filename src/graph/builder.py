@@ -5,8 +5,10 @@ from __future__ import annotations
 from langgraph.graph import END, StateGraph
 
 from src.graph.academic import (
+    evaluate_hallucination,
     generate_answer,
     rag_retrieve,
+    should_retry_or_end,
     should_web_search,
     web_search,
 )
@@ -29,6 +31,7 @@ def build_graph() -> StateGraph:
     graph.add_node("rag_retrieve", rag_retrieve)
     graph.add_node("web_search", web_search)
     graph.add_node("generate_answer", generate_answer)
+    graph.add_node("evaluate_hallucination", evaluate_hallucination)
 
     # SubGraph B — Planner (search first, then single-call plan)
     graph.add_node("search_policy", search_policy)
@@ -62,7 +65,15 @@ def build_graph() -> StateGraph:
         },
     )
     graph.add_edge("web_search", "generate_answer")
-    graph.add_edge("generate_answer", END)
+    graph.add_edge("generate_answer", "evaluate_hallucination")
+    graph.add_conditional_edges(
+        "evaluate_hallucination",
+        should_retry_or_end,
+        {
+            "retry": "rag_retrieve",
+            "end": END,
+        },
+    )
 
     # Planner flow (search → generate in 2 steps)
     graph.add_edge("search_policy", "generate_plan")

@@ -51,6 +51,8 @@ def sample_state(human_msg):
         "retrieved_docs": [],
         "search_results": [],
         "plan": "",
+        "retry_count": 0,
+        "hallucination_detected": False,
     }
 
 

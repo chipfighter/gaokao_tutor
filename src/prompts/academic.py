@@ -27,6 +27,41 @@ ACADEMIC_SYSTEM_PROMPT = """\
 - 数学公式使用 LaTeX 格式（如 $ax^2+bx+c=0$）
 """ 
 
+HALLUCINATION_SYSTEM_PROMPT = """\
+You are a hallucination evaluator for a Chinese Gaokao tutoring system.
+Your job is to determine whether a generated answer is faithful to the \
+provided reference context and actually addresses the student's question.\
+"""
+
+HALLUCINATION_EVAL_PROMPT = """\
+## Student's Question
+
+{question}
+
+## Retrieved Reference Context
+
+{context}
+
+## Generated Answer
+
+{answer}
+
+## Evaluation Criteria
+
+1. **Faithfulness**: Is the answer grounded in the reference context? Does it \
+avoid fabricating facts, formulas, or sources not present in the context?
+2. **Relevance**: Does the answer actually address the student's question \
+rather than going off-topic?
+3. **Acknowledgment**: If the context is insufficient, does the answer honestly \
+acknowledge this rather than making up information?
+
+An answer that supplements context with well-known, universally accepted \
+knowledge (e.g., basic math formulas) is acceptable and should be considered \
+faithful.
+
+Evaluate the answer and return your judgment.\
+"""
+
 ACADEMIC_ANSWER_PROMPT = """\
 ## 参考资料
 

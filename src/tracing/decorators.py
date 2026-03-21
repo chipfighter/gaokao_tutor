@@ -52,6 +52,10 @@ def traced_node(func: Callable) -> Callable:
                         span.set_attribute("graph.node.search_result_count", len(result["search_results"]))
                     if "messages" in result:
                         span.set_attribute("graph.node.message_count", len(result["messages"]))
+                    if "retry_count" in result:
+                        span.set_attribute("graph.node.retry_count", result["retry_count"])
+                    if "hallucination_detected" in result:
+                        span.set_attribute("graph.node.hallucination_detected", result["hallucination_detected"])
 
                 span.set_status(StatusCode.OK)
                 return result

@@ -1,4 +1,5 @@
-"""SubGraph A — Academic Tutor: RAG retrieval, web search fallback, answer generation.
+"""SubGraph A — Academic Tutor: RAG retrieval, web search fallback, answer generation,
+and hallucination evaluation with retry loop.
 
 Keypoint extraction is handled by the supervisor node (merged for latency),
 so this subgraph starts directly at RAG retrieval.
@@ -6,18 +7,42 @@ so this subgraph starts directly at RAG retrieval.
 
 from __future__ import annotations
 
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 from src.graph.llm import get_fallback_llm, invoke_with_fallback
 from src.graph.state import TutorState
-from src.prompts.academic import ACADEMIC_ANSWER_PROMPT, ACADEMIC_SYSTEM_PROMPT
+from src.prompts.academic import (
+    ACADEMIC_ANSWER_PROMPT,
+    ACADEMIC_SYSTEM_PROMPT,
+    HALLUCINATION_EVAL_PROMPT,
+    HALLUCINATION_SYSTEM_PROMPT,
+)
 from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_retrieval, traced_search
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 2
+
+
+# ── Structured output schema for hallucination evaluation ─────────
+class HallucinationEvaluation(BaseModel):
+    """LLM-evaluated faithfulness judgment."""
+
+    is_faithful: bool = Field(
+        description="True if the answer is grounded in the retrieved context "
+        "and addresses the student's question without fabrication",
+    )
+    reason: str = Field(
+        description="Brief explanation of the evaluation judgment",
+    )
 
 
 def _get_llm(**kwargs) -> ChatOpenAI:
@@ -113,8 +138,12 @@ def generate_answer(state: TutorState) -> dict:
     """Synthesize final answer from RAG docs + search results + LLM."""
     llm = _get_llm()
 
-    last_msg = state["messages"][-1]
-    question = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+    # Find the original question (last HumanMessage, robust for retry loops)
+    question = ""
+    for msg in reversed(state["messages"]):
+        if isinstance(msg, HumanMessage):
+            question = msg.content
+            break
 
     user_prompt = ACADEMIC_ANSWER_PROMPT.format(
         retrieved_context=_format_retrieved(state.get("retrieved_docs", [])),
@@ -138,3 +167,80 @@ def generate_answer(state: TutorState) -> dict:
         )
 
     return {"messages": [AIMessage(content=response.content)]}
+
+
+# ── Node 4: hallucination evaluation (reflection loop) ─────────
+
+@traced_node
+def evaluate_hallucination(state: TutorState) -> dict:
+    """Evaluate whether the generated answer hallucinates beyond retrieved context.
+
+    Uses structured LLM output to judge faithfulness. On detection,
+    increments retry_count to signal the conditional edge for re-retrieval.
+    Defaults to valid on any parsing/model failure (safe fallback).
+    """
+    llm = _get_llm(temperature=0.0)
+    structured_primary = llm.with_structured_output(HallucinationEvaluation)
+
+    fallback_llm = get_fallback_llm(temperature=0.0)
+    structured_fallback = fallback_llm.with_structured_output(HallucinationEvaluation)
+
+    # Extract the generated answer (last message) and original question
+    answer = state["messages"][-1].content
+    question = ""
+    for msg in reversed(state["messages"]):
+        if isinstance(msg, HumanMessage):
+            question = msg.content
+            break
+
+    # Build context from retrieved docs
+    docs = state.get("retrieved_docs", [])
+    context = "\n".join(d.get("content", "") for d in docs) if docs else ""
+
+    eval_prompt = HALLUCINATION_EVAL_PROMPT.format(
+        question=question, context=context, answer=answer,
+    )
+
+    retry_count = state.get("retry_count", 0)
+
+    with traced_llm_call(
+        model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        node_name="evaluate_hallucination",
+        temperature=0.0,
+    ) as span:
+        try:
+            evaluation = invoke_with_fallback(
+                structured_primary,
+                [
+                    SystemMessage(content=HALLUCINATION_SYSTEM_PROMPT),
+                    HumanMessage(content=eval_prompt),
+                ],
+                fallback=structured_fallback,
+                span=span,
+            )
+            is_faithful = evaluation.is_faithful
+        except Exception:
+            logger.warning("Hallucination evaluation failed, defaulting to valid")
+            is_faithful = True
+
+    hallucination_detected = not is_faithful
+
+    result: dict = {"hallucination_detected": hallucination_detected}
+    if hallucination_detected:
+        result["retry_count"] = retry_count + 1
+
+    return result
+
+
+def should_retry_or_end(state: TutorState) -> str:
+    """Conditional edge: retry via rag_retrieve or route to END.
+
+    Allows up to MAX_RETRIES re-retrieval attempts when hallucination
+    is detected. After exhausting retries, routes to END regardless.
+    """
+    if (
+        state.get("hallucination_detected", False)
+        and state.get("retry_count", 0) <= MAX_RETRIES
+    ):
+        return "retry"
+    return "end"

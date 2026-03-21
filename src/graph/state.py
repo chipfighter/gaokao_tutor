@@ -14,5 +14,7 @@ class TutorState(TypedDict):
     subject: str                                            # The topic being discussed
     keypoints: list[str]                                    # Key points
     retrieved_docs: list[dict]                              # RAG docs
-    search_results: list[dict]                              # Search result 
+    search_results: list[dict]                              # Search result
     plan: str                                               # Generated plans
+    retry_count: int                                        # Hallucination retry counter
+    hallucination_detected: bool                            # Hallucination flag
