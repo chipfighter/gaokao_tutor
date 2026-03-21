@@ -51,14 +51,18 @@ async def generate_sse(query: str) -> AsyncGenerator[str, None]:
     """
     state_input = {"messages": [HumanMessage(content=query)]}
     
+    ALLOWED_NODES = {"generate_answer", "generate_plan", "emotional_response"}
+    
     # We use astream_events to catch the LLM streaming tokens
     async for event in graph.astream_events(state_input, version="v2"):
         if event["event"] == "on_chat_model_stream":
-            chunk = event["data"]["chunk"]
-            if chunk.content:
-                # SSE format: data: {"type": "token", "content": "..."}\n\n
-                payload = json.dumps({"type": "token", "content": chunk.content}, ensure_ascii=False)
-                yield f"data: {payload}\n\n"
+            node_name = event.get("metadata", {}).get("langgraph_node")
+            if node_name in ALLOWED_NODES:
+                chunk = event["data"]["chunk"]
+                if chunk.content:
+                    # SSE format: data: {"type": "token", "content": "..."}\n\n
+                    payload = json.dumps({"type": "token", "content": chunk.content}, ensure_ascii=False)
+                    yield f"data: {payload}\n\n"
 
 @app.post("/stream")
 async def stream_endpoint(request: ChatRequest):
