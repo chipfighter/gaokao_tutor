@@ -13,10 +13,8 @@ env/
 # Jetbrains IDE
 .idea/
 
-
 # test
 .pytest_cache/
-
 
 # some drafts
 drafts/
@@ -29,3 +27,17 @@ learning_notes/
 
 # logs
 logs/
+
+# Makefile(A scaffold file for future full-stack task automation)
+Makefile
+
+# Frontend / Next.js
+node_modules/
+.next/
+out/
+build/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

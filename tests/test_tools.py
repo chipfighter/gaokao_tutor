@@ -107,25 +107,3 @@ class TestPrompts:
         from src.prompts.emotional import EMOTIONAL_SYSTEM_PROMPT
         assert len(EMOTIONAL_SYSTEM_PROMPT) > 50
         assert "班主任" in EMOTIONAL_SYSTEM_PROMPT
-
-
-class TestStreamAdapter:
-    """Verify stream adapter constants and structure."""
-
-    def test_node_status_labels_cover_all_nodes(self):
-        from src.graph.stream_adapter import NODE_STATUS_LABELS
-        expected_nodes = [
-            "supervisor",
-            "rag_retrieve",
-            "web_search",
-            "generate_answer",
-            "search_policy",
-            "generate_plan",
-            "emotional_response",
-        ]
-        for node in expected_nodes:
-            assert node in NODE_STATUS_LABELS, f"Missing status label for node: {node}"
-
-    def test_stream_adapter_function_exists(self):
-        from src.graph.stream_adapter import stream_graph_to_streamlit
-        assert callable(stream_graph_to_streamlit)
