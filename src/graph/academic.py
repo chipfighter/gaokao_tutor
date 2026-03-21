@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.graph.llm import get_fallback_llm, invoke_with_fallback
 from src.graph.state import TutorState
 from src.prompts.academic import ACADEMIC_ANSWER_PROMPT, ACADEMIC_SYSTEM_PROMPT
 from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
@@ -121,14 +122,19 @@ def generate_answer(state: TutorState) -> dict:
         question=question,
     )
 
+    fallback = get_fallback_llm(temperature=0.7)
+    messages = [
+        SystemMessage(content=ACADEMIC_SYSTEM_PROMPT),
+        HumanMessage(content=user_prompt),
+    ]
+
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="generate_answer",
         temperature=0.7,
-    ):
-        response = llm.invoke([
-            SystemMessage(content=ACADEMIC_SYSTEM_PROMPT),
-            HumanMessage(content=user_prompt),
-        ])
+    ) as span:
+        response = invoke_with_fallback(
+            llm, messages, fallback=fallback, span=span,
+        )
 
     return {"messages": [AIMessage(content=response.content)]}

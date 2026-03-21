@@ -7,6 +7,7 @@ import os
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.graph.llm import get_fallback_llm, invoke_with_fallback
 from src.graph.state import TutorState
 from src.prompts.emotional import EMOTIONAL_SYSTEM_PROMPT
 from src.tracing import traced_llm_call, traced_node
@@ -30,11 +31,15 @@ def emotional_response(state: TutorState) -> dict:
     for msg in state["messages"]:
         history.append(msg)
 
+    fallback = get_fallback_llm(temperature=0.8)
+
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="emotional_response",
         temperature=0.8,
-    ):
-        response = llm.invoke(history)
+    ) as span:
+        response = invoke_with_fallback(
+            llm, history, fallback=fallback, span=span,
+        )
 
     return {"messages": [AIMessage(content=response.content)]}

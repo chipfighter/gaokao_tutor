@@ -21,6 +21,7 @@ from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.graph.llm import get_fallback_llm, invoke_with_fallback
 from src.graph.state import TutorState
 from src.prompts.planner import PLANNER_GENERATE_PROMPT, PLANNER_SYSTEM_PROMPT
 from src.tools.search_tool import search as web_search_fn
@@ -45,7 +46,6 @@ _SEARCH_TIMEOUT = 15
 @traced_node
 def search_policy(state: TutorState) -> dict:
     """Use DuckDuckGo to fetch the latest Gaokao policy information. Times out after 15s."""
-    # TODO: Need to change the hardcode search context with dynamic query.
     year = datetime.now().year
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
@@ -89,14 +89,19 @@ def generate_plan(state: TutorState) -> dict:
         policy_info=policy_info,
     )
 
+    fallback = get_fallback_llm(temperature=0.7)
+    messages = [
+        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+        HumanMessage(content=prompt),
+    ]
+
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="generate_plan",
         temperature=0.7,
-    ):
-        response = llm.invoke([
-            SystemMessage(content=PLANNER_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+    ) as span:
+        response = invoke_with_fallback(
+            llm, messages, fallback=fallback, span=span,
+        )
 
     return {"messages": [AIMessage(content=response.content)]}
