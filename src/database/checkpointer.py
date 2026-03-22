@@ -16,10 +16,16 @@ logger = logging.getLogger(__name__)
 def get_db_uri() -> str | None:
     """Read the PostgreSQL connection URI from environment.
 
+    Normalizes SQLAlchemy-style schemes (e.g. ``postgresql+asyncpg://``)
+    to plain ``postgresql://`` as required by psycopg.
+
     Returns:
         The DB_URI string, or None if not configured.
     """
-    return os.getenv("DB_URI")
+    uri = os.getenv("DB_URI")
+    if uri and uri.startswith("postgresql+"):
+        uri = "postgresql" + uri[uri.index("://"):]
+    return uri
 
 
 def make_thread_config(thread_id: str | None = None) -> dict:

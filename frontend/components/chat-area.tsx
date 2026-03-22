@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Send, Bot, User, Plus, SlidersHorizontal, Mic } from "lucide-react"
+import ReactMarkdown, { type Components } from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 export interface Message {
@@ -20,17 +21,13 @@ interface ChatAreaProps {
 
 export function ChatArea({ messages, onSendMessage, isLoading }: ChatAreaProps) {
   const [input, setInput] = useState("")
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     // Scroll to bottom when messages change
-    if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
-      }
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -50,8 +47,8 @@ export function ChatArea({ messages, onSendMessage, isLoading }: ChatAreaProps) 
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
-      {/* Messages Area */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 px-8">
+      {/* Messages Area — native scroll container with constrained height */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 min-h-0">
         <div className="max-w-3xl mx-auto py-6 flex flex-col gap-6">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[60vh] text-center">
@@ -121,8 +118,10 @@ export function ChatArea({ messages, onSendMessage, isLoading }: ChatAreaProps) 
               </div>
             </div>
           )}
+          {/* Scroll anchor */}
+          <div ref={messagesEndRef} className="h-4 shrink-0" />
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input Area - Gemini Style with new palette */}
       <div className="bg-background px-8 py-4">
@@ -199,6 +198,53 @@ export function ChatArea({ messages, onSendMessage, isLoading }: ChatAreaProps) 
   )
 }
 
+// Tailwind-styled overrides for react-markdown elements
+const markdownComponents: Components = {
+  h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2 text-[#3D5A40]">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5 text-[#3D5A40]">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1 text-[#3D5A40]">{children}</h3>,
+  p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+  ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold text-[#3D5A40]">{children}</strong>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-3 border-[#7A9E7E] pl-3 my-2 text-muted-foreground italic">
+      {children}
+    </blockquote>
+  ),
+  code: ({ className, children }) => {
+    // Fenced code blocks get a className like "language-xxx" from remark
+    const isBlock = className?.startsWith("language-")
+    if (isBlock) {
+      return (
+        <code className="block bg-[#F5F3E8] rounded-lg p-3 my-2 text-xs font-mono overflow-x-auto whitespace-pre">
+          {children}
+        </code>
+      )
+    }
+    // Inline code
+    return (
+      <code className="bg-[#F5F3E8] rounded px-1.5 py-0.5 text-xs font-mono text-[#5C3D2E]">
+        {children}
+      </code>
+    )
+  },
+  pre: ({ children }) => <pre className="my-2">{children}</pre>,
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full text-xs border-collapse">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-[#C8D6C9] bg-[#F5F3E8] px-2 py-1 text-left font-semibold">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-[#C8D6C9] px-2 py-1">{children}</td>
+  ),
+  hr: () => <hr className="border-[#C8D6C9] my-3" />,
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user"
 
@@ -211,12 +257,20 @@ function MessageBubble({ message }: { message: Message }) {
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
       <div className={cn(
-        "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-        isUser 
-          ? "bg-[#3D5A40] text-white rounded-tr-sm" 
+        "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed overflow-hidden",
+        isUser
+          ? "bg-[#3D5A40] text-white rounded-tr-sm"
           : "bg-white border border-[#C8D6C9] text-[#2D2D2D] rounded-tl-sm"
       )}>
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {isUser ? (
+          // User messages render as plain text
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        ) : (
+          // Assistant messages render as Markdown
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {message.content}
+          </ReactMarkdown>
+        )}
       </div>
     </div>
   )

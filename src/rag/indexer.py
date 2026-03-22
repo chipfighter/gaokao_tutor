@@ -11,12 +11,25 @@ import os
 from pathlib import Path
 from typing import Optional
 
+import math
+
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 
 COLLECTION_NAME = "gaokao_docs"
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+
+
+def _l2_to_relevance(distance: float) -> float:
+    """Convert Chroma L2 distance to a [0, 1] relevance score.
+
+    Chroma's default distance metric is L2 (Euclidean).  For normalized
+    embeddings the maximum possible L2 distance is sqrt(2).  We linearly
+    map [0, sqrt(2)] → [1, 0] so that higher scores mean higher relevance
+    and the values are always within [0, 1].
+    """
+    return 1.0 - distance / math.sqrt(2)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -87,6 +100,7 @@ def build_index(
         collection_name=COLLECTION_NAME,
         persist_directory=persist_directory,
         ids=ids,
+        relevance_score_fn=_l2_to_relevance,
     )
     return vectorstore
 
@@ -111,4 +125,5 @@ def load_index(
         collection_name=COLLECTION_NAME,
         embedding_function=embedding,
         persist_directory=persist_directory,
+        relevance_score_fn=_l2_to_relevance,
     )
