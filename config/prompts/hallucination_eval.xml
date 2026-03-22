@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<prompt><![CDATA[
+## Student's Question
+
+{question}
+
+## Retrieved Reference Context
+
+{context}
+
+## Generated Answer
+
+{answer}
+
+## Evaluation Criteria
+
+1. **Faithfulness**: Is the answer grounded in the reference context? Does it avoid fabricating facts, formulas, or sources not present in the context?
+2. **Relevance**: Does the answer actually address the student's question rather than going off-topic?
+3. **Acknowledgment**: If the context is insufficient, does the answer honestly acknowledge this rather than making up information?
+
+An answer that supplements context with well-known, universally accepted knowledge (e.g., basic math formulas) is acceptable and should be considered faithful.
+
+Evaluate the answer and return your judgment.
+]]></prompt>

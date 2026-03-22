@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<prompt><![CDATA[
+## 参考资料
+
+{retrieved_context}
+
+## 网络搜索补充
+
+{search_context}
+
+## 学生问题
+
+{question}
+
+请根据以上参考资料和搜索结果，为学生提供详尽的解答。如果参考资料不足以回答，请基于你的专业知识补充，但要明确标注哪些是来自资料、哪些是你的补充。
+]]></prompt>

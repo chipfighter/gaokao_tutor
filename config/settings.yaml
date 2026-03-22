@@ -1,0 +1,22 @@
+# Gaokao Tutor — System Logic Parameters
+# Loaded by src/config/config_manager.py at runtime.
+
+academic:
+  max_retries: 2                        # Hallucination retry loop limit
+  search_timeout: 15                    # Web search timeout (seconds)
+  temperature: 0.7                      # Answer generation temperature
+  hallucination_eval_temperature: 0.0   # Evaluation requires determinism
+
+planner:
+  search_timeout: 15                    # Policy search timeout (seconds)
+  temperature: 0.7                      # Plan generation temperature
+
+emotional:
+  temperature: 0.8                      # Slightly creative for empathy
+
+supervisor:
+  temperature: 0.0                      # Deterministic intent routing
+  valid_intents:
+    - academic
+    - planning
+    - emotional

@@ -21,9 +21,9 @@ from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.config import get_setting, load_prompt
 from src.graph.llm import get_fallback_llm, invoke_with_fallback
 from src.graph.state import TutorState
-from src.prompts.planner import PLANNER_GENERATE_PROMPT, PLANNER_SYSTEM_PROMPT
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_search
 
@@ -33,14 +33,14 @@ def _get_llm() -> ChatOpenAI:
         model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         api_key=os.getenv("DEEPSEEK_API_KEY"),
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        temperature=0.7,
+        temperature=get_setting("planner.temperature", 0.7),
     )
 
 
 # ── Node 1: search latest Gaokao policies ─────────────────────────
 
 # Time Limit to prevent search too long
-_SEARCH_TIMEOUT = 15
+_SEARCH_TIMEOUT = get_setting("planner.search_timeout", 15)
 
 
 @traced_node
@@ -84,21 +84,22 @@ def generate_plan(state: TutorState) -> dict:
         for r in search_results
     ) if search_results else "未获取到最新政策信息，请基于通用经验给出建议。"
 
-    prompt = PLANNER_GENERATE_PROMPT.format(
+    prompt = load_prompt("planner_generate").format(
         user_request=user_request,
         policy_info=policy_info,
     )
 
-    fallback = get_fallback_llm(temperature=0.7)
+    temperature = get_setting("planner.temperature", 0.7)
+    fallback = get_fallback_llm(temperature=temperature)
     messages = [
-        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+        SystemMessage(content=load_prompt("planner_system")),
         HumanMessage(content=prompt),
     ]
 
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="generate_plan",
-        temperature=0.7,
+        temperature=temperature,
     ) as span:
         response = invoke_with_fallback(
             llm, messages, fallback=fallback, span=span,

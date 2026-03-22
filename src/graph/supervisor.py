@@ -12,11 +12,11 @@ import os
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from src.config import get_setting, load_prompt
 from src.graph.state import TutorState
-from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.tracing import traced_llm_call, traced_node
 
-_VALID_INTENTS = {"academic", "planning", "emotional"}
+_VALID_INTENTS = set(get_setting("supervisor.valid_intents", ["academic", "planning", "emotional"]))
 
 
 def _get_llm() -> ChatOpenAI:
@@ -24,7 +24,7 @@ def _get_llm() -> ChatOpenAI:
         model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         api_key=os.getenv("DEEPSEEK_API_KEY"),
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        temperature=0.0,
+        temperature=get_setting("supervisor.temperature", 0.0),
     )
 
 
@@ -40,13 +40,14 @@ def supervisor_node(state: TutorState) -> dict:
     last_msg = state["messages"][-1]
     user_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
 
+    temperature = get_setting("supervisor.temperature", 0.0)
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="supervisor",
-        temperature=0.0,
+        temperature=temperature,
     ):
         response = llm.invoke([
-            SystemMessage(content=SUPERVISOR_SYSTEM_PROMPT),
+            SystemMessage(content=load_prompt("supervisor_system")),
             HumanMessage(content=user_text),
         ])
 

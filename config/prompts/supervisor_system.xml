@@ -1,11 +1,5 @@
-"""Supervisor node prompt — intent classification with keypoint extraction.
-
-Combines intent routing and academic keypoint extraction into a single
-LLM call to reduce latency (saves one full API roundtrip on the
-academic path).
-"""
-
-SUPERVISOR_SYSTEM_PROMPT = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<prompt><![CDATA[
 你是一位高考辅导系统的意图路由器。你的任务是分析学生的输入，判断其意图类别，并提取关键信息。严格以 JSON 格式输出。
 
 ## 意图类别
@@ -76,4 +70,4 @@ SUPERVISOR_SYSTEM_PROMPT = """\
 3. academic 类必须准确判断 subject（math 或 chinese），无法确定时填 other
 4. keypoints 提取 1-3 个最核心的知识点关键词，用于后续知识库检索
 5. 只输出 JSON，不要解释
-"""
+]]></prompt>

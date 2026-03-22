@@ -16,21 +16,16 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from src.config import get_setting, load_prompt
 from src.graph.llm import get_fallback_llm, invoke_with_fallback
 from src.graph.state import TutorState
-from src.prompts.academic import (
-    ACADEMIC_ANSWER_PROMPT,
-    ACADEMIC_SYSTEM_PROMPT,
-    HALLUCINATION_EVAL_PROMPT,
-    HALLUCINATION_SYSTEM_PROMPT,
-)
 from src.rag.retriever import retrieve
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_retrieval, traced_search
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
+MAX_RETRIES = get_setting("academic.max_retries", 2)
 
 
 # ── Structured output schema for hallucination evaluation ─────────
@@ -51,7 +46,7 @@ def _get_llm(**kwargs) -> ChatOpenAI:
         model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         api_key=os.getenv("DEEPSEEK_API_KEY"),
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        temperature=0.7,
+        temperature=get_setting("academic.temperature", 0.7),
     )
     defaults.update(kwargs)
     return ChatOpenAI(**defaults)
@@ -97,7 +92,7 @@ def rag_retrieve(state: TutorState) -> dict:
 
 # ── Node 2: web search (parallel branch B) ────────────────────────
 
-_SEARCH_TIMEOUT = 15
+_SEARCH_TIMEOUT = get_setting("academic.search_timeout", 15)
 
 
 @traced_node
@@ -156,22 +151,23 @@ def generate_answer(state: TutorState) -> dict:
     rag_docs = [c for c in context if c.get("type") == "rag"]
     web_results = [c for c in context if c.get("type") == "web"]
 
-    user_prompt = ACADEMIC_ANSWER_PROMPT.format(
+    temperature = get_setting("academic.temperature", 0.7)
+    user_prompt = load_prompt("academic_answer").format(
         retrieved_context=_format_retrieved(rag_docs),
         search_context=_format_search(web_results),
         question=question,
     )
 
-    fallback = get_fallback_llm(temperature=0.7)
+    fallback = get_fallback_llm(temperature=temperature)
     messages = [
-        SystemMessage(content=ACADEMIC_SYSTEM_PROMPT),
+        SystemMessage(content=load_prompt("academic_system")),
         HumanMessage(content=user_prompt),
     ]
 
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="generate_answer",
-        temperature=0.7,
+        temperature=temperature,
     ) as span:
         response = invoke_with_fallback(
             llm, messages, fallback=fallback, span=span,
@@ -190,10 +186,11 @@ def evaluate_hallucination(state: TutorState) -> dict:
     increments retry_count to signal the conditional edge for re-retrieval.
     Defaults to valid on any parsing/model failure (safe fallback).
     """
-    llm = _get_llm(temperature=0.0)
+    eval_temp = get_setting("academic.hallucination_eval_temperature", 0.0)
+    llm = _get_llm(temperature=eval_temp)
     structured_primary = llm.with_structured_output(HallucinationEvaluation)
 
-    fallback_llm = get_fallback_llm(temperature=0.0)
+    fallback_llm = get_fallback_llm(temperature=eval_temp)
     structured_fallback = fallback_llm.with_structured_output(HallucinationEvaluation)
 
     # Extract the generated answer (last message) and original question
@@ -204,7 +201,7 @@ def evaluate_hallucination(state: TutorState) -> dict:
     docs = state.get("context", [])
     context = "\n".join(d.get("content", "") for d in docs) if docs else ""
 
-    eval_prompt = HALLUCINATION_EVAL_PROMPT.format(
+    eval_prompt = load_prompt("hallucination_eval").format(
         question=question, context=context, answer=answer,
     )
 
@@ -213,13 +210,13 @@ def evaluate_hallucination(state: TutorState) -> dict:
     with traced_llm_call(
         model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         node_name="evaluate_hallucination",
-        temperature=0.0,
+        temperature=eval_temp,
     ) as span:
         try:
             evaluation = invoke_with_fallback(
                 structured_primary,
                 [
-                    SystemMessage(content=HALLUCINATION_SYSTEM_PROMPT),
+                    SystemMessage(content=load_prompt("hallucination_system")),
                     HumanMessage(content=eval_prompt),
                 ],
                 fallback=structured_fallback,

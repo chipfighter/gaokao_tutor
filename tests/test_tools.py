@@ -84,26 +84,32 @@ class TestPrompts:
     """Verify prompt templates are well-formed and contain expected placeholders."""
 
     def test_supervisor_prompt_not_empty(self):
-        from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
-        assert len(SUPERVISOR_SYSTEM_PROMPT) > 100
-        assert "academic" in SUPERVISOR_SYSTEM_PROMPT
-        assert "planning" in SUPERVISOR_SYSTEM_PROMPT
-        assert "emotional" in SUPERVISOR_SYSTEM_PROMPT
+        from src.config import load_prompt
+        prompt = load_prompt("supervisor_system")
+        assert len(prompt) > 100
+        assert "academic" in prompt
+        assert "planning" in prompt
+        assert "emotional" in prompt
 
     def test_academic_prompts_have_placeholders(self):
-        from src.prompts.academic import ACADEMIC_ANSWER_PROMPT, ACADEMIC_SYSTEM_PROMPT
-        assert "{retrieved_context}" in ACADEMIC_ANSWER_PROMPT
-        assert "{search_context}" in ACADEMIC_ANSWER_PROMPT
-        assert "{question}" in ACADEMIC_ANSWER_PROMPT
-        assert len(ACADEMIC_SYSTEM_PROMPT) > 50
+        from src.config import load_prompt
+        answer_prompt = load_prompt("academic_answer")
+        system_prompt = load_prompt("academic_system")
+        assert "{retrieved_context}" in answer_prompt
+        assert "{search_context}" in answer_prompt
+        assert "{question}" in answer_prompt
+        assert len(system_prompt) > 50
 
     def test_planner_prompts_have_placeholders(self):
-        from src.prompts.planner import PLANNER_GENERATE_PROMPT, PLANNER_SYSTEM_PROMPT
-        assert "{user_request}" in PLANNER_GENERATE_PROMPT
-        assert "{policy_info}" in PLANNER_GENERATE_PROMPT
-        assert len(PLANNER_SYSTEM_PROMPT) > 50
+        from src.config import load_prompt
+        generate_prompt = load_prompt("planner_generate")
+        system_prompt = load_prompt("planner_system")
+        assert "{user_request}" in generate_prompt
+        assert "{policy_info}" in generate_prompt
+        assert len(system_prompt) > 50
 
     def test_emotional_prompt_not_empty(self):
-        from src.prompts.emotional import EMOTIONAL_SYSTEM_PROMPT
-        assert len(EMOTIONAL_SYSTEM_PROMPT) > 50
-        assert "班主任" in EMOTIONAL_SYSTEM_PROMPT
+        from src.config import load_prompt
+        prompt = load_prompt("emotional_system")
+        assert len(prompt) > 50
+        assert "班主任" in prompt
