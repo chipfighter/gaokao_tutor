@@ -181,8 +181,7 @@ class TestGenerateAnswerFallback:
 
         state = {
             "messages": [HumanMessage(content="判别式怎么用")],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
         }
 
         from src.graph.academic import generate_answer
@@ -206,8 +205,7 @@ class TestGenerateAnswerFallback:
 
         state = {
             "messages": [HumanMessage(content="判别式怎么用")],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
         }
 
         from src.graph.academic import generate_answer
@@ -351,8 +349,7 @@ class TestFallbackTracing:
 
         state = {
             "messages": [HumanMessage(content="test")],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
         }
 
         from src.graph.academic import generate_answer
@@ -388,8 +385,7 @@ class TestFallbackTracing:
 
         state = {
             "messages": [HumanMessage(content="test")],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
         }
 
         from src.graph.academic import generate_answer

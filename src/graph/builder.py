@@ -5,11 +5,11 @@ from __future__ import annotations
 from langgraph.graph import END, StateGraph
 
 from src.graph.academic import (
+    academic_router,
     evaluate_hallucination,
     generate_answer,
     rag_retrieve,
     should_retry_or_end,
-    should_web_search,
     web_search,
 )
 from src.graph.emotional import emotional_response
@@ -27,7 +27,8 @@ def build_graph() -> StateGraph:
     # ── Nodes ────────────────────────────────────────────────────────
     graph.add_node("supervisor", supervisor_node)
 
-    # SubGraph A — Academic (keypoints extracted by supervisor)
+    # SubGraph A — Academic (parallel retrieval + answer generation)
+    graph.add_node("academic_router", academic_router)
     graph.add_node("rag_retrieve", rag_retrieve)
     graph.add_node("web_search", web_search)
     graph.add_node("generate_answer", generate_answer)
@@ -40,7 +41,6 @@ def build_graph() -> StateGraph:
     # Emotional
     graph.add_node("emotional_response", emotional_response)
 
-
     # ── Edges ────────────────────────────────────────────────────────
     graph.set_entry_point("supervisor")
 
@@ -49,28 +49,27 @@ def build_graph() -> StateGraph:
         "supervisor",
         route_by_intent,    # judge users intent
         {
-            "academic": "rag_retrieve",
+            "academic": "academic_router",
             "planning": "search_policy",
             "emotional": "emotional_response",
         },
     )
 
-    # Academic flow
-    graph.add_conditional_edges(
-        "rag_retrieve",
-        should_web_search,  # judge whether to search the web
-        {
-            "web_search": "web_search",
-            "generate_answer": "generate_answer",
-        },
-    )
+    # Academic flow — fan-out/fan-in parallel retrieval
+    graph.add_edge("academic_router", "rag_retrieve")
+    graph.add_edge("academic_router", "web_search")
+
+    # Fan-in: both converge at generate_answer
+    graph.add_edge("rag_retrieve", "generate_answer")
     graph.add_edge("web_search", "generate_answer")
+
+    # Hallucination evaluation with retry loop
     graph.add_edge("generate_answer", "evaluate_hallucination")
     graph.add_conditional_edges(
         "evaluate_hallucination",
         should_retry_or_end,
         {
-            "retry": "rag_retrieve",
+            "retry": "academic_router",
             "end": END,
         },
     )

@@ -46,8 +46,8 @@ def traced_node(func: Callable) -> Callable:
                         span.set_attribute("graph.node.subject", result["subject"])
                     if "keypoints" in result:
                         span.set_attribute("graph.node.keypoint_count", len(result["keypoints"]))
-                    if "retrieved_docs" in result:
-                        span.set_attribute("graph.node.retrieved_doc_count", len(result["retrieved_docs"]))
+                    if "context" in result:
+                        span.set_attribute("graph.node.context_count", len(result["context"]))
                     if "search_results" in result:
                         span.set_attribute("graph.node.search_result_count", len(result["search_results"]))
                     if "messages" in result:

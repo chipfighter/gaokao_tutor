@@ -81,6 +81,7 @@ ALLOWED_NODES = {"generate_answer", "generate_plan", "emotional_response"}
 # All graph nodes whose lifecycle (start/end) we broadcast to the frontend.
 GRAPH_NODES = {
     "supervisor",
+    "academic_router",
     "rag_retrieve",
     "web_search",
     "generate_answer",

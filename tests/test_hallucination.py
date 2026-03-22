@@ -68,7 +68,7 @@ class TestEvaluateHallucinationNode:
 
         state = {
             "messages": [HumanMessage(content="question"), AIMessage(content="answer")],
-            "retrieved_docs": [{"content": "context"}],
+            "context": [{"content": "context"}],
             "retry_count": 0,
         }
 
@@ -95,7 +95,7 @@ class TestEvaluateHallucinationNode:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="bad")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 0,
         }
 
@@ -122,7 +122,7 @@ class TestEvaluateHallucinationNode:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="bad")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 1,
         }
 
@@ -147,7 +147,7 @@ class TestEvaluateHallucinationNode:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="a")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 0,
         }
 
@@ -179,7 +179,7 @@ class TestEvaluateHallucinationNode:
                 AIMessage(content="first attempt"),
                 AIMessage(content="second attempt"),
             ],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 1,
         }
 
@@ -253,7 +253,7 @@ class TestHallucinationTracing:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="a")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 0,
         }
 
@@ -284,7 +284,7 @@ class TestHallucinationTracing:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="a")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 1,
         }
 
@@ -323,7 +323,7 @@ class TestEvaluateHallucinationFallback:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="a")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 0,
         }
 
@@ -350,7 +350,7 @@ class TestEvaluateHallucinationFallback:
 
         state = {
             "messages": [HumanMessage(content="q"), AIMessage(content="a")],
-            "retrieved_docs": [],
+            "context": [],
             "retry_count": 0,
         }
 
@@ -386,8 +386,7 @@ class TestGenerateAnswerRetryCompat:
                 HumanMessage(content="What is the discriminant?"),
                 AIMessage(content="Previous bad answer"),
             ],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
         }
 
         from src.graph.academic import generate_answer

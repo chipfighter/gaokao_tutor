@@ -21,9 +21,11 @@ class TestBuildGraph:
         node_names = set(graph.nodes.keys())
         expected = {
             "supervisor",
+            "academic_router",
             "rag_retrieve",
             "web_search",
             "generate_answer",
+            "evaluate_hallucination",
             "search_policy",
             "generate_plan",
             "emotional_response",

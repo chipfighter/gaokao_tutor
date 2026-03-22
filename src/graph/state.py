@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 from typing import Annotated, Literal
 
 from langgraph.graph.message import add_messages
@@ -13,8 +14,8 @@ class TutorState(TypedDict):
     intent: Literal["academic", "planning", "emotional"]    # User intent
     subject: str                                            # The topic being discussed
     keypoints: list[str]                                    # Key points
-    retrieved_docs: list[dict]                              # RAG docs
-    search_results: list[dict]                              # Search result
+    context: Annotated[list[dict], operator.add]            # Merged retrieval context (fan-in)
+    search_results: list[dict]                              # Planner search results
     plan: str                                               # Generated plans
     retry_count: int                                        # Hallucination retry counter
     hallucination_detected: bool                            # Hallucination flag

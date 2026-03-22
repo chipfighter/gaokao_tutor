@@ -10,9 +10,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 from src.graph.academic import (
     _format_retrieved,
     _format_search,
+    academic_router,
     generate_answer,
     rag_retrieve,
-    should_web_search,
     web_search,
 )
 
@@ -31,7 +31,8 @@ class TestRagRetrieve:
         result = rag_retrieve(state)
 
         mock_retrieve.assert_called_once_with(query="二次函数 判别式", subject="math")
-        assert len(result["retrieved_docs"]) == 1
+        assert len(result["context"]) == 1
+        assert result["context"][0]["type"] == "rag"
 
     @patch("src.graph.academic.retrieve")
     def test_falls_back_to_message_when_no_keypoints(self, mock_retrieve):
@@ -60,41 +61,17 @@ class TestRagRetrieve:
         mock_retrieve.assert_called_once_with(query="test", subject=None)
 
 
-class TestShouldWebSearch:
-
-    def test_triggers_search_when_no_docs(self):
-        state = {"retrieved_docs": []}
-        assert should_web_search(state) == "web_search"
-
-    def test_triggers_search_when_low_score(self):
-        state = {"retrieved_docs": [{"score": 0.1}]}
-        assert should_web_search(state) == "web_search"
-
-    def test_skips_search_when_hit(self):
-        state = {"retrieved_docs": [{"score": 0.85}]}
-        assert should_web_search(state) == "generate_answer"
-
-    def test_boundary_score_at_threshold(self):
-        from src.rag.retriever import RELEVANCE_THRESHOLD
-        state = {"retrieved_docs": [{"score": RELEVANCE_THRESHOLD}]}
-        assert should_web_search(state) == "generate_answer"
-
-    def test_boundary_score_below_threshold(self):
-        from src.rag.retriever import RELEVANCE_THRESHOLD
-        state = {"retrieved_docs": [{"score": RELEVANCE_THRESHOLD - 0.01}]}
-        assert should_web_search(state) == "web_search"
-
-
 class TestWebSearch:
 
     @patch("src.graph.academic.web_search_fn")
-    def test_returns_search_results(self, mock_search):
+    def test_returns_context_results(self, mock_search):
         mock_search.return_value = [{"content": "result", "title": "t", "url": "u"}]
 
         state = {"messages": [HumanMessage(content="量子力学")]}
         result = web_search(state)
 
-        assert len(result["search_results"]) == 1
+        assert len(result["context"]) == 1
+        assert result["context"][0]["type"] == "web"
         mock_search.assert_called_once_with("量子力学")
 
     @patch("src.graph.academic.web_search_fn", side_effect=Exception("network error"))
@@ -102,7 +79,7 @@ class TestWebSearch:
         state = {"messages": [HumanMessage(content="test")]}
         result = web_search(state)
 
-        assert result["search_results"] == []
+        assert result["context"] == []
 
 
 class TestFormatHelpers:
@@ -127,16 +104,17 @@ class TestFormatHelpers:
 
 class TestGenerateAnswer:
 
+    @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic._get_llm")
-    def test_generates_ai_message(self, mock_get_llm, mock_llm_response):
+    def test_generates_ai_message(self, mock_get_llm, mock_get_fallback, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("判别式 Δ=b²-4ac 的作用是...")
         mock_get_llm.return_value = mock_llm
+        mock_get_fallback.return_value = MagicMock()
 
         state = {
             "messages": [HumanMessage(content="判别式怎么用")],
-            "retrieved_docs": [{"content": "Δ=b²-4ac", "source": "test.pdf", "score": 0.9}],
-            "search_results": [],
+            "context": [{"type": "rag", "content": "Δ=b²-4ac", "source": "test.pdf", "score": 0.9}],
         }
         result = generate_answer(state)
 
@@ -144,16 +122,17 @@ class TestGenerateAnswer:
         assert isinstance(result["messages"][0], AIMessage)
         assert "判别式" in result["messages"][0].content
 
+    @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic._get_llm")
-    def test_handles_empty_context(self, mock_get_llm, mock_llm_response):
+    def test_handles_empty_context(self, mock_get_llm, mock_get_fallback, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("I can help with that.")
         mock_get_llm.return_value = mock_llm
+        mock_get_fallback.return_value = MagicMock()
 
         state = {
             "messages": [HumanMessage(content="test")],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
         }
         result = generate_answer(state)
 

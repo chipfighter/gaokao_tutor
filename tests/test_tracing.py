@@ -369,18 +369,18 @@ class TestTracedNodeDecorator:
         spans = in_memory_exporter.get_finished_spans()
         assert spans[0].attributes["graph.node.intent"] == "emotional"
 
-    def test_records_doc_count_when_present(self, in_memory_exporter):
-        """If the node returns 'retrieved_docs', count should be recorded."""
+    def test_records_context_count_when_present(self, in_memory_exporter):
+        """If the node returns 'context', count should be recorded."""
         from src.tracing.decorators import traced_node
 
         @traced_node
         def rag_node(state):
-            return {"retrieved_docs": [{"content": "a"}, {"content": "b"}]}
+            return {"context": [{"type": "rag", "content": "a"}, {"type": "rag", "content": "b"}]}
 
         rag_node({"messages": []})
 
         spans = in_memory_exporter.get_finished_spans()
-        assert spans[0].attributes["graph.node.retrieved_doc_count"] == 2
+        assert spans[0].attributes["graph.node.context_count"] == 2
 
     def test_records_search_result_count(self, in_memory_exporter):
         """If the node returns 'search_results', count should be recorded."""

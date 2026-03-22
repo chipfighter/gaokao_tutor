@@ -7,7 +7,7 @@ class TestTutorState:
 
     def test_state_has_required_keys(self):
         annotations = TutorState.__annotations__
-        required = ["messages", "intent", "subject", "keypoints", "retrieved_docs", "search_results", "plan"]
+        required = ["messages", "intent", "subject", "keypoints", "context", "plan"]
         for key in required:
             assert key in annotations, f"TutorState missing key: {key}"
 
@@ -17,8 +17,7 @@ class TestTutorState:
             "intent": "academic",
             "subject": "math",
             "keypoints": [],
-            "retrieved_docs": [],
-            "search_results": [],
+            "context": [],
             "plan": "",
         }
         assert state["intent"] == "academic"
@@ -31,8 +30,7 @@ class TestTutorState:
                 "intent": intent,
                 "subject": "",
                 "keypoints": [],
-                "retrieved_docs": [],
-                "search_results": [],
+                "context": [],
                 "plan": "",
             }
             assert state["intent"] == intent

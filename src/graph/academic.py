@@ -1,8 +1,9 @@
-"""SubGraph A — Academic Tutor: RAG retrieval, web search fallback, answer generation,
-and hallucination evaluation with retry loop.
+"""SubGraph A — Academic Tutor: parallel retrieval (fan-out/fan-in),
+answer generation, and hallucination evaluation with retry loop.
 
 Keypoint extraction is handled by the supervisor node (merged for latency),
-so this subgraph starts directly at RAG retrieval.
+so this subgraph starts at the academic_router which fans out to both
+rag_retrieve and web_search in parallel.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from src.prompts.academic import (
     HALLUCINATION_EVAL_PROMPT,
     HALLUCINATION_SYSTEM_PROMPT,
 )
-from src.rag.retriever import RELEVANCE_THRESHOLD, retrieve
+from src.rag.retriever import retrieve
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_retrieval, traced_search
 
@@ -56,43 +57,53 @@ def _get_llm(**kwargs) -> ChatOpenAI:
     return ChatOpenAI(**defaults)
 
 
-# ── Node 1: RAG retrieval ─────────────────────────────────────────
+def _last_human_query(state: TutorState) -> str:
+    """Extract the last HumanMessage content (robust for retry loops)."""
+    for msg in reversed(state["messages"]):
+        if isinstance(msg, HumanMessage):
+            return msg.content
+    return ""
+
+
+# ── Node 0: academic router (fan-out trigger) ─────────────────────
+
+@traced_node
+def academic_router(state: TutorState) -> dict:
+    """No-op router node that enables parallel fan-out to retrieval nodes."""
+    return {}
+
+
+# ── Node 1: RAG retrieval (parallel branch A) ─────────────────────
 
 @traced_node
 def rag_retrieve(state: TutorState) -> dict:
     """Query ChromaDB with keypoints extracted by the supervisor node."""
     keypoints = state.get("keypoints", [])
     subject = state.get("subject")
-    query = " ".join(keypoints) if keypoints else state["messages"][-1].content
+    query = " ".join(keypoints) if keypoints else _last_human_query(state)
 
-    with traced_retrieval(query=query, subject=subject if subject != "other" else None) as span:
-        result = retrieve(query=query, subject=subject if subject != "other" else None)
+    subj = subject if subject != "other" else None
+
+    with traced_retrieval(query=query, subject=subj) as span:
+        result = retrieve(query=query, subject=subj)
         span.set_attribute("rag.doc_count", len(result.get("docs", [])))
         span.set_attribute("rag.is_hit", result.get("is_hit", False))
         if result.get("docs"):
             span.set_attribute("rag.top_score", result["docs"][0].get("score", 0))
 
-    return {"retrieved_docs": result["docs"]}
+    docs = result["docs"]
+    return {"context": [{"type": "rag", **doc} for doc in docs]}
 
 
-def should_web_search(state: TutorState) -> str:
-    """Conditional edge: route to web_search if RAG missed, else generate_answer."""
-    docs = state.get("retrieved_docs", [])
-    if not docs or docs[0].get("score", 0) < RELEVANCE_THRESHOLD:
-        return "web_search"
-    return "generate_answer"
-
-
-# ── Node 2: web search (conditional) ──────────────────────────────
+# ── Node 2: web search (parallel branch B) ────────────────────────
 
 _SEARCH_TIMEOUT = 15
 
 
 @traced_node
 def web_search(state: TutorState) -> dict:
-    """Fallback to DuckDuckGo when RAG retrieval misses. Times out after 15s."""
-    last_msg = state["messages"][-1]
-    query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+    """Fan-out web search — runs in parallel with rag_retrieve."""
+    query = _last_human_query(state)
 
     with traced_search(query=query, timeout=_SEARCH_TIMEOUT) as span:
         try:
@@ -110,7 +121,7 @@ def web_search(state: TutorState) -> dict:
             span.set_attribute("search.result_count", 0)
             span.set_attribute("search.timed_out", False)
 
-    return {"search_results": search_results}
+    return {"context": [{"type": "web", **r} for r in search_results]}
 
 
 # ── Node 3: generate answer ──────────────────────────────────────
@@ -135,19 +146,19 @@ def _format_search(results: list[dict]) -> str:
 
 @traced_node
 def generate_answer(state: TutorState) -> dict:
-    """Synthesize final answer from RAG docs + search results + LLM."""
+    """Synthesize final answer from merged context (RAG + web) via LLM."""
     llm = _get_llm()
 
-    # Find the original question (last HumanMessage, robust for retry loops)
-    question = ""
-    for msg in reversed(state["messages"]):
-        if isinstance(msg, HumanMessage):
-            question = msg.content
-            break
+    question = _last_human_query(state)
+
+    # Split merged context by source type
+    context = state.get("context", [])
+    rag_docs = [c for c in context if c.get("type") == "rag"]
+    web_results = [c for c in context if c.get("type") == "web"]
 
     user_prompt = ACADEMIC_ANSWER_PROMPT.format(
-        retrieved_context=_format_retrieved(state.get("retrieved_docs", [])),
-        search_context=_format_search(state.get("search_results", [])),
+        retrieved_context=_format_retrieved(rag_docs),
+        search_context=_format_search(web_results),
         question=question,
     )
 
@@ -187,14 +198,10 @@ def evaluate_hallucination(state: TutorState) -> dict:
 
     # Extract the generated answer (last message) and original question
     answer = state["messages"][-1].content
-    question = ""
-    for msg in reversed(state["messages"]):
-        if isinstance(msg, HumanMessage):
-            question = msg.content
-            break
+    question = _last_human_query(state)
 
-    # Build context from retrieved docs
-    docs = state.get("retrieved_docs", [])
+    # Build context from all retrieval sources
+    docs = state.get("context", [])
     context = "\n".join(d.get("content", "") for d in docs) if docs else ""
 
     eval_prompt = HALLUCINATION_EVAL_PROMPT.format(
@@ -233,7 +240,7 @@ def evaluate_hallucination(state: TutorState) -> dict:
 
 
 def should_retry_or_end(state: TutorState) -> str:
-    """Conditional edge: retry via rag_retrieve or route to END.
+    """Conditional edge: retry via academic_router or route to END.
 
     Allows up to MAX_RETRIES re-retrieval attempts when hallucination
     is detected. After exhausting retries, routes to END regardless.
