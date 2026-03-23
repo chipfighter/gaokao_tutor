@@ -12,7 +12,7 @@ from src.graph.emotional import emotional_response
 
 class TestEmotionalResponse:
 
-    @patch("src.graph.emotional._get_llm")
+    @patch("src.graph.emotional.get_node_llm")
     def test_returns_ai_message(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("同学你好，感到焦虑是很正常的...")
@@ -25,7 +25,7 @@ class TestEmotionalResponse:
         assert isinstance(result["messages"][0], AIMessage)
         assert len(result["messages"][0].content) > 0
 
-    @patch("src.graph.emotional._get_llm")
+    @patch("src.graph.emotional.get_node_llm")
     def test_passes_full_history(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("response")
@@ -43,7 +43,7 @@ class TestEmotionalResponse:
         # First message is SystemMessage (prompt), then the 3 history messages
         assert len(call_args) == 4
 
-    @patch("src.graph.emotional._get_llm")
+    @patch("src.graph.emotional.get_node_llm")
     def test_system_prompt_included(self, mock_get_llm, mock_llm_response):
         from langchain_core.messages import SystemMessage
 

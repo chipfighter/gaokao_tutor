@@ -51,7 +51,7 @@ class TestEvaluateHallucinationNode:
     """Test the evaluate_hallucination graph node."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_faithful_answer_not_flagged(self, mock_get_llm, mock_get_fallback):
         """Faithful answer -> hallucination_detected=False, no retry_count change."""
         mock_llm = MagicMock()
@@ -78,7 +78,7 @@ class TestEvaluateHallucinationNode:
         assert "retry_count" not in result
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_unfaithful_answer_detected(self, mock_get_llm, mock_get_fallback):
         """Hallucinating answer -> hallucination_detected=True, retry_count incremented."""
         mock_llm = MagicMock()
@@ -105,7 +105,7 @@ class TestEvaluateHallucinationNode:
         assert result["retry_count"] == 1
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_increments_retry_count(self, mock_get_llm, mock_get_fallback):
         """retry_count=1 + hallucination -> retry_count=2."""
         mock_llm = MagicMock()
@@ -132,7 +132,7 @@ class TestEvaluateHallucinationNode:
         assert result["retry_count"] == 2
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_defaults_to_valid_on_parse_failure(self, mock_get_llm, mock_get_fallback):
         """Structured output parsing fails -> default to valid (don't block answer)."""
         mock_llm = MagicMock()
@@ -156,7 +156,7 @@ class TestEvaluateHallucinationNode:
         assert result["hallucination_detected"] is False
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_extracts_last_human_message_as_question(
         self, mock_get_llm, mock_get_fallback,
     ):
@@ -235,7 +235,7 @@ class TestHallucinationTracing:
     """Verify OTel spans record hallucination metadata."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_span_records_hallucination_detected(
         self, mock_get_llm, mock_get_fallback, in_memory_exporter,
     ):
@@ -266,7 +266,7 @@ class TestHallucinationTracing:
         assert attrs["graph.node.hallucination_detected"] is True
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_span_records_retry_count(
         self, mock_get_llm, mock_get_fallback, in_memory_exporter,
     ):
@@ -305,7 +305,7 @@ class TestEvaluateHallucinationFallback:
     """Test that evaluate_hallucination uses fallback on primary LLM failure."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_uses_fallback_on_primary_timeout(self, mock_get_llm, mock_get_fallback):
         primary = MagicMock()
         primary_structured = MagicMock()
@@ -333,7 +333,7 @@ class TestEvaluateHallucinationFallback:
         fallback_structured.invoke.assert_called_once()
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_returns_primary_when_healthy(self, mock_get_llm, mock_get_fallback):
         primary = MagicMock()
         primary_structured = MagicMock()
@@ -368,7 +368,7 @@ class TestGenerateAnswerRetryCompat:
     """generate_answer must use the original HumanMessage during retry loops."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_uses_last_human_message_not_last_message(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):

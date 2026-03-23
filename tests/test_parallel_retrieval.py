@@ -198,7 +198,7 @@ class TestGenerateAnswerFromMergedContext:
     """generate_answer splits merged context by type for formatting."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_uses_both_rag_and_web_context(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -228,7 +228,7 @@ class TestGenerateAnswerFromMergedContext:
         assert "判别式用法" in prompt_text
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_handles_empty_context(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):

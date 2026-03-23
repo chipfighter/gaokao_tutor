@@ -105,7 +105,7 @@ class TestFormatHelpers:
 class TestGenerateAnswer:
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_generates_ai_message(self, mock_get_llm, mock_get_fallback, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("判别式 Δ=b²-4ac 的作用是...")
@@ -123,7 +123,7 @@ class TestGenerateAnswer:
         assert "判别式" in result["messages"][0].content
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_handles_empty_context(self, mock_get_llm, mock_get_fallback, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("I can help with that.")

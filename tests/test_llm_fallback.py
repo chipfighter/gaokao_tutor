@@ -167,7 +167,7 @@ class TestGenerateAnswerFallback:
     """Test that generate_answer falls back on primary LLM failure."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_uses_fallback_on_primary_timeout(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -192,7 +192,7 @@ class TestGenerateAnswerFallback:
         fallback.invoke.assert_called_once()
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_returns_primary_when_healthy(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -224,7 +224,7 @@ class TestGeneratePlanFallback:
     """Test that generate_plan falls back on primary LLM failure."""
 
     @patch("src.graph.planner.get_fallback_llm")
-    @patch("src.graph.planner._get_llm")
+    @patch("src.graph.planner.get_node_llm")
     def test_uses_fallback_on_primary_timeout(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -249,7 +249,7 @@ class TestGeneratePlanFallback:
         fallback.invoke.assert_called_once()
 
     @patch("src.graph.planner.get_fallback_llm")
-    @patch("src.graph.planner._get_llm")
+    @patch("src.graph.planner.get_node_llm")
     def test_returns_primary_when_healthy(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -281,7 +281,7 @@ class TestEmotionalResponseFallback:
     """Test that emotional_response falls back on primary LLM failure."""
 
     @patch("src.graph.emotional.get_fallback_llm")
-    @patch("src.graph.emotional._get_llm")
+    @patch("src.graph.emotional.get_node_llm")
     def test_uses_fallback_on_primary_timeout(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -303,7 +303,7 @@ class TestEmotionalResponseFallback:
         fallback.invoke.assert_called_once()
 
     @patch("src.graph.emotional.get_fallback_llm")
-    @patch("src.graph.emotional._get_llm")
+    @patch("src.graph.emotional.get_node_llm")
     def test_returns_primary_when_healthy(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -332,7 +332,7 @@ class TestFallbackTracing:
     """Test that fallback events appear correctly in OTel spans."""
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_span_records_fallback_attributes(
         self, mock_get_llm, mock_get_fallback,
         in_memory_exporter, mock_llm_response,
@@ -370,7 +370,7 @@ class TestFallbackTracing:
         assert "llm.fallback_triggered" in event_names
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_span_records_no_fallback_on_success(
         self, mock_get_llm, mock_get_fallback,
         in_memory_exporter, mock_llm_response,

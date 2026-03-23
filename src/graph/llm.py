@@ -12,6 +12,8 @@ import os
 
 from langchain_openai import ChatOpenAI
 
+from src.config import get_setting
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -38,6 +40,28 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # LLM factories
 # ---------------------------------------------------------------------------
+
+def get_node_llm(node_name: str, **overrides) -> ChatOpenAI:
+    """Build a ChatOpenAI instance configured for a specific graph node.
+
+    Reads per-node ``model``, ``base_url``, ``api_key_env``, and ``temperature``
+    from ``settings.yaml``.  Falls back to ``DEEPSEEK_*`` env vars when a
+    node has no explicit override in settings.
+    """
+    model = get_setting(f"{node_name}.model", os.getenv("DEEPSEEK_MODEL", "deepseek-chat"))
+    api_key_env = get_setting(f"{node_name}.api_key_env", "DEEPSEEK_API_KEY")
+    base_url = get_setting(f"{node_name}.base_url", os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
+    temperature = get_setting(f"{node_name}.temperature", 0.7)
+
+    defaults = dict(
+        model=model,
+        api_key=os.getenv(api_key_env),
+        base_url=base_url,
+        temperature=temperature,
+    )
+    defaults.update(overrides)
+    return ChatOpenAI(**defaults)
+
 
 def get_primary_llm(**overrides) -> ChatOpenAI:
     """Build the primary chat model from DEEPSEEK_* env vars."""

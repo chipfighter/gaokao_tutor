@@ -19,22 +19,12 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 
 from src.config import get_setting, load_prompt
-from src.graph.llm import get_fallback_llm, invoke_with_fallback
+from src.graph.llm import get_fallback_llm, get_node_llm, invoke_with_fallback
 from src.graph.state import TutorState
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_search
-
-
-def _get_llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        temperature=get_setting("planner.temperature", 0.7),
-    )
 
 
 # ── Node 1: search latest Gaokao policies ─────────────────────────
@@ -73,7 +63,7 @@ def search_policy(state: TutorState) -> dict:
 @traced_node
 def generate_plan(state: TutorState) -> dict:
     """Produce a complete study plan from user request + policy context in one LLM call."""
-    llm = _get_llm()
+    llm = get_node_llm("planner")
 
     last_msg = state["messages"][-1]
     user_request = last_msg.content if hasattr(last_msg, "content") else str(last_msg)

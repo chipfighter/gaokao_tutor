@@ -13,7 +13,7 @@ from src.graph.supervisor import _VALID_INTENTS, route_by_intent, supervisor_nod
 
 class TestSupervisorNode:
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_academic_intent(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response(
@@ -28,7 +28,7 @@ class TestSupervisorNode:
         assert result["subject"] == "math"
         assert "判别式" in result["keypoints"]
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_planning_intent(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response(
@@ -42,7 +42,7 @@ class TestSupervisorNode:
         assert result["intent"] == "planning"
         assert result["keypoints"] == []
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_emotional_intent(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response(
@@ -55,7 +55,7 @@ class TestSupervisorNode:
 
         assert result["intent"] == "emotional"
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_invalid_intent_falls_back_to_academic(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response(
@@ -68,7 +68,7 @@ class TestSupervisorNode:
 
         assert result["intent"] == "academic"
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_malformed_json_falls_back(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("not valid json {{{")
@@ -81,7 +81,7 @@ class TestSupervisorNode:
         assert result["subject"] == "other"
         assert result["keypoints"] == []
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_missing_fields_use_defaults(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response(json.dumps({"intent": "emotional"}))

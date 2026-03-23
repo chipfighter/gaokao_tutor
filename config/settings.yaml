@@ -15,6 +15,9 @@ emotional:
   temperature: 0.8                      # Slightly creative for empathy
 
 supervisor:
+  model: "Qwen/Qwen2.5-7B-Instruct"
+  base_url: "https://api.siliconflow.cn/v1"
+  api_key_env: "SILICONFLOW_API_KEY"
   temperature: 0.0                      # Deterministic intent routing
   valid_intents:
     - academic

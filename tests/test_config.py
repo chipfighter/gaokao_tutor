@@ -437,7 +437,7 @@ class TestNodeConfigIntegration:
         assert _SEARCH_TIMEOUT == get_setting("academic.search_timeout")
 
     @patch("src.graph.academic.get_fallback_llm")
-    @patch("src.graph.academic._get_llm")
+    @patch("src.graph.academic.get_node_llm")
     def test_generate_answer_uses_config_prompt(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
@@ -459,7 +459,7 @@ class TestNodeConfigIntegration:
 
         assert "answer" in result["messages"][0].content
 
-    @patch("src.graph.supervisor._get_llm")
+    @patch("src.graph.supervisor.get_node_llm")
     def test_supervisor_uses_config_prompt(self, mock_get_llm):
         """supervisor_node should use prompt loaded from XML config."""
         import json

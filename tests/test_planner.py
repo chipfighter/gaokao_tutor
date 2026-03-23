@@ -46,7 +46,7 @@ class TestSearchPolicy:
 
 class TestGeneratePlan:
 
-    @patch("src.graph.planner._get_llm")
+    @patch("src.graph.planner.get_node_llm")
     def test_generates_plan_message(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("## 复习计划\n- 周一：数学\n- 周二：语文")
@@ -64,7 +64,7 @@ class TestGeneratePlan:
         assert isinstance(result["messages"][0], AIMessage)
         assert "复习计划" in result["messages"][0].content
 
-    @patch("src.graph.planner._get_llm")
+    @patch("src.graph.planner.get_node_llm")
     def test_handles_empty_search_results(self, mock_get_llm, mock_llm_response):
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = mock_llm_response("基于通用经验的计划...")

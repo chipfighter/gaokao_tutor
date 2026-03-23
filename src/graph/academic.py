@@ -13,11 +13,10 @@ import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from src.config import get_setting, load_prompt
-from src.graph.llm import get_fallback_llm, invoke_with_fallback
+from src.graph.llm import get_fallback_llm, get_node_llm, invoke_with_fallback
 from src.graph.state import TutorState
 from src.rag.retriever import retrieve
 from src.tools.search_tool import search as web_search_fn
@@ -39,17 +38,6 @@ class HallucinationEvaluation(BaseModel):
     reason: str = Field(
         description="Brief explanation of the evaluation judgment",
     )
-
-
-def _get_llm(**kwargs) -> ChatOpenAI:
-    defaults = dict(
-        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        temperature=get_setting("academic.temperature", 0.7),
-    )
-    defaults.update(kwargs)
-    return ChatOpenAI(**defaults)
 
 
 def _last_human_query(state: TutorState) -> str:
@@ -142,7 +130,7 @@ def _format_search(results: list[dict]) -> str:
 @traced_node
 def generate_answer(state: TutorState) -> dict:
     """Synthesize final answer from merged context (RAG + web) via LLM."""
-    llm = _get_llm()
+    llm = get_node_llm("academic")
 
     question = _last_human_query(state)
 
@@ -187,7 +175,7 @@ def evaluate_hallucination(state: TutorState) -> dict:
     Defaults to valid on any parsing/model failure (safe fallback).
     """
     eval_temp = get_setting("academic.hallucination_eval_temperature", 0.0)
-    llm = _get_llm(temperature=eval_temp)
+    llm = get_node_llm("academic", temperature=eval_temp)
     structured_primary = llm.with_structured_output(HallucinationEvaluation)
 
     fallback_llm = get_fallback_llm(temperature=eval_temp)
