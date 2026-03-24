@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -111,6 +112,7 @@ async def generate_sse(
     """
     config = make_thread_config(thread_id)
     state_input = {"messages": [HumanMessage(content=query)]}
+    node_start_times: dict[str, float] = {}
 
     async for event in graph.astream_events(state_input, config=config, version="v2"):
         event_type = event["event"]
@@ -122,11 +124,33 @@ async def generate_sse(
             # Only emit for top-level graph nodes (name matches metadata),
             # not for internal sub-chains (RunnableSequence, etc.).
             if node_name and node_name == meta_node and node_name in GRAPH_NODES:
-                status = "start" if event_type == "on_chain_start" else "end"
-                payload = json.dumps(
-                    {"type": "node_event", "status": status, "node": node_name},
-                    ensure_ascii=False,
-                )
+                if event_type == "on_chain_start":
+                    node_start_times[node_name] = time.monotonic()
+                    payload = json.dumps(
+                        {"type": "node_event", "status": "start", "node": node_name},
+                        ensure_ascii=False,
+                    )
+                else:
+                    duration_ms = None
+                    start_t = node_start_times.pop(node_name, None)
+                    if start_t is not None:
+                        duration_ms = round((time.monotonic() - start_t) * 1000)
+
+                    error = None
+                    output = event.get("data", {}).get("output")
+                    if isinstance(output, dict) and output.get("error"):
+                        error = str(output["error"])
+
+                    payload = json.dumps(
+                        {
+                            "type": "node_event",
+                            "status": "end",
+                            "node": node_name,
+                            "duration_ms": duration_ms,
+                            "error": error,
+                        },
+                        ensure_ascii=False,
+                    )
                 yield f"data: {payload}\n\n"
 
         # ── Token streaming ────────────────────────────────────────────
@@ -140,6 +164,24 @@ async def generate_sse(
                         ensure_ascii=False,
                     )
                     yield f"data: {payload}\n\n"
+
+        # ── Token usage events ─────────────────────────────────────────
+        elif event_type == "on_chat_model_end":
+            node_name = event.get("metadata", {}).get("langgraph_node")
+            output = event.get("data", {}).get("output")
+            usage = getattr(output, "usage_metadata", None)
+            if usage and node_name:
+                payload = json.dumps(
+                    {
+                        "type": "usage",
+                        "node": node_name,
+                        "input_tokens": usage.get("input_tokens", 0),
+                        "output_tokens": usage.get("output_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                    },
+                    ensure_ascii=False,
+                )
+                yield f"data: {payload}\n\n"
 
 
 @app.post("/stream")
