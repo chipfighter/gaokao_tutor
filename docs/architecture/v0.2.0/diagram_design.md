@@ -1,10 +1,10 @@
-# v0.2.0 Architecture Diagrams
+# v0.2.0 架构图
 
-This document contains Mermaid diagrams for the v0.2.0 system architecture.
+本文档包含 v0.2.0 系统架构的 Mermaid 图解。Mermaid 节点标签及代码片段保留英文，以便与代码库保持一致。
 
 ---
 
-## 1. Full System Architecture
+## 1. 全系统架构总览
 
 ```mermaid
 flowchart TD
@@ -84,7 +84,7 @@ flowchart TD
 
 ---
 
-## 2. LangGraph Node Topology (State Flow)
+## 2. LangGraph 节点拓扑（状态流转）
 
 ```mermaid
 flowchart TD
@@ -119,22 +119,22 @@ flowchart TD
     style fan_out fill:#f0f4f0,stroke:#7a9e7e
 ```
 
-**State (`TutorState`) key fields and write ownership:**
+**`TutorState` 关键字段与写入方归属：**
 
-| Field | Written by | Consumed by |
-|-------|-----------|-------------|
-| `messages` | supervisor (initial), generate_answer, generate_plan, emotional_response | all nodes |
-| `intent` | supervisor | builder (conditional edge) |
-| `subject` | supervisor | rag_retrieve (metadata filter) |
-| `keypoints` | supervisor | rag_retrieve (query construction) |
-| `context` | rag_retrieve, web_search (merged via `operator.add`) | generate_answer |
+| 字段 | 写入方 | 消费方 |
+|------|--------|--------|
+| `messages` | supervisor（初始化）、generate_answer、generate_plan、emotional_response | 所有节点 |
+| `intent` | supervisor | builder（条件边） |
+| `subject` | supervisor | rag_retrieve（元数据过滤） |
+| `keypoints` | supervisor | rag_retrieve（查询构造） |
+| `context` | rag_retrieve、web_search（通过 `operator.add` 合并） | generate_answer |
 | `search_results` | search_policy | generate_plan |
 | `retry_count` | evaluate_hallucination | should_retry_or_end |
 | `hallucination_detected` | evaluate_hallucination | should_retry_or_end |
 
 ---
 
-## 3. Hybrid RAG Pipeline
+## 3. 混合 RAG 流水线
 
 ```mermaid
 flowchart LR
@@ -167,7 +167,7 @@ flowchart LR
     FALLBACK --> OUT
 ```
 
-**Configuration (`config/settings.yaml`):**
+**`config/settings.yaml` 配置参数说明：**
 
 ```yaml
 rag:
@@ -180,7 +180,7 @@ rag:
 
 ---
 
-## 4. SSE Event Stream Schema
+## 4. SSE 事件流格式规范
 
 ```mermaid
 sequenceDiagram
@@ -209,19 +209,19 @@ sequenceDiagram
     end
 ```
 
-**Frontend consumption mapping:**
+**前端 SSE 事件消费映射：**
 
-| SSE Event | Frontend Handler |
-|-----------|-----------------|
-| `node_event` start | `nodeEvents` state: add `{node, status: "running", ts}` |
-| `node_event` end | `nodeEvents`: mark `status: "done"`, attach `durationMs`; append `[PERF]` to logs |
-| `node_event` end with error | `nodeEvents`: mark done; append `[ERROR]` to logs |
-| `token` | Append `content` to current assistant message (streaming typewriter) |
-| `usage` | Accumulate into `tokenUsage` state; append `[USAGE]` to logs |
+| SSE 事件 | 前端处理逻辑 |
+|----------|------------|
+| `node_event` start | `nodeEvents` 状态：追加 `{node, status: "running", ts}` |
+| `node_event` end | `nodeEvents`：标记 `status: "done"`，附加 `durationMs`；向日志追加 `[PERF]` 条目 |
+| `node_event` end with error | `nodeEvents`：标记完成；向日志追加 `[ERROR]` 条目 |
+| `token` | 将 `content` 追加到当前助手消息（流式打字机效果） |
+| `usage` | 累加到 `tokenUsage` 状态；向日志追加 `[USAGE]` 条目 |
 
 ---
 
-## 5. LLM Configuration Architecture
+## 5. LLM 配置架构
 
 ```mermaid
 flowchart TD

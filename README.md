@@ -1,9 +1,9 @@
-# Gaokao Tutor
+# 高考辅导 AI
 
 <p align="center">
-  <a href="README_zh.md">中文文档</a> ·
-  <a href="docs/architecture/v0.2.0/diagram_design.md">Architecture Diagrams</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="README_en.md">English README</a> ·
+  <a href="docs/architecture/v0.2.0/diagram_design.md">架构图</a> ·
+  <a href="CHANGELOG.md">更新日志</a>
 </p>
 
 <p align="center">
@@ -13,108 +13,107 @@
   <img src="https://github.com/<your-username>/gaokao_tutor/actions/workflows/ci.yml/badge.svg" alt="CI" />
 </p>
 
-A production-oriented, multi-agent conversational AI for Chinese Gaokao preparation. Built on **LangGraph** (stateful orchestration), **FastAPI** (SSE streaming), and **Next.js** (reactive frontend). A lightweight Qwen2.5-7B supervisor routes queries to three specialized agents — subject tutor, study planner, and emotional support — each backed by a fully observable, fault-tolerant pipeline.
+一个面向生产场景的高考备考多智能体对话 AI 系统，基于 **LangGraph**（有状态编排）、**FastAPI**（SSE 流式传输）和 **Next.js**（响应式前端）构建。一个轻量级的 Qwen2.5-7B 路由 Agent 将用户的问题分发给三个专项 Agent：学科辅导、学习规划和情绪疏导，每个分支都具备完整的可观测性和容错机制。
 
 ---
 
-## Demo
+## 效果演示
 
-<img src="./assets/v0.2.0/3a9a28cc-86fd-49ad-bf46-29c3b38f8b38.png" alt="3a9a28cc-86fd-49ad-bf46-29c3b38f8b38" style="zoom:40%;" />
+<img src="./assets/v0.2.0/3a9a28cc-86fd-49ad-bf46-29c3b38f8b38.png" alt="demo-screenshot-1" style="zoom:40%;" />
 
-<img src="./assets/v0.2.0/793acbbf-c209-4572-a108-98e6a80527cf.png" alt="3a9a28cc-86fd-49ad-bf46-29c3b38f8b38" style="zoom:40%;" />
-
----
-
-## What's New in v0.2.0
-
-- **Hybrid RAG**: Three-stage retrieval — ChromaDB vector search + BM25 keyword search (jieba tokenization) + BGE Reranker (SiliconFlow API). Meaningfully higher recall than pure vector search.
-- **Enriched SSE Stream**: Every `node_event` now carries `duration_ms` and `error` fields. A new `usage` event type surfaces per-node token consumption in real time.
-- **Graph DAG Visualization**: Right panel tab toggle — "Node Trail" (sequential) vs "Graph View" (full topology with live node state).
-- **Token Usage Display**: Per-session running total (input / output / total tokens) in the frontend right panel.
-- **Centralized LLM Factory**: `get_node_llm()` unifies all four graph modules. Supervisor now routes via **Qwen2.5-7B on SiliconFlow** (fast, low-latency) while generation nodes retain DeepSeek-V3.
-- **Cross-Provider Fallback**: SiliconFlow + Qwen2.5-7B as the secondary provider, giving true cross-infrastructure failover.
+<img src="./assets/v0.2.0/793acbbf-c209-4572-a108-98e6a80527cf.png" alt="demo-screenshot-2" style="zoom:40%;" />
 
 ---
 
-## Core Features
+## v0.2.0 新特性
 
-- **Academic Q&A** — Hybrid RAG (vector + BM25 + reranker) with parallel fan-out/fan-in, hallucination evaluation and automatic retry loop
-- **Study Planner** — Personalized revision schedules enriched with live Gaokao policy data via web search
-- **Emotional Support** — Warm, practical responses in the persona of an experienced homeroom teacher
-- **Intent Routing** — Lightweight Qwen2.5-7B supervisor classifies intent and dispatches to the right workflow at low latency
-- **LLM Fallback** — Automatic failover to SiliconFlow (Qwen2.5-7B) when the primary DeepSeek API times out or returns 5xx
-- **Distributed Tracing** — OpenTelemetry instrumentation across all graph nodes, exported to Jaeger (OTLP) with SQLite fallback
-- **State Persistence** — PostgreSQL-backed LangGraph checkpointer for multi-turn conversation memory (graceful stateless degradation if DB unavailable)
-- **Configuration-Driven** — YAML runtime parameters + XML prompt registry; modify behavior without touching code
-- **Real-Time Observability** — SSE-driven reasoning path (node trail or DAG view), per-node timing, error stream, and token usage display
-- **Markdown Rendering** — Full GFM support: tables, code blocks, math formulas (LaTeX), lists
+- **混合检索 RAG**：三阶段检索流水线——ChromaDB 向量检索 + BM25 关键词检索（jieba 分词）+ BGE Reranker（SiliconFlow API），召回率显著优于纯向量检索
+- **增强 SSE 事件流**：`node_event` 现在携带 `duration_ms` 和 `error` 字段，新增 `usage` 事件类型，实时上报各节点的 Token 消耗
+- **图拓扑可视化**：右侧面板支持选项卡切换——"节点列表"（顺序展示）与"图视图"（完整 DAG 拓扑 + 实时节点状态）
+- **Token 用量展示**：每次会话的 Token 累计计数（输入 / 输出 / 总计）实时显示在右侧面板
+- **统一 LLM 工厂**：`get_node_llm()` 将四个图模块的 LLM 构建逻辑收敛为一处。Supervisor 改用 **SiliconFlow 上的 Qwen2.5-7B**（低延迟路由），生成节点保留 DeepSeek-V3
+- **跨厂商容灾降级**：Fallback 指向 SiliconFlow + Qwen2.5-7B，实现真正的跨基础设施故障转移
 
 ---
 
-## Architecture
+## 核心功能
+
+- **学科问答** — 混合 RAG（向量 + BM25 + Reranker）并行 Fan-out/Fan-in 检索，幻觉评估 + 自动重试闭环
+- **学习规划** — 结合实时高考政策搜索数据，生成个性化复习计划
+- **情绪支持** — 以经验丰富的班主任身份，提供温暖而实用的回应
+- **意图路由** — Qwen2.5-7B Supervisor 低延迟分类用户意图，精准分发到对应工作流
+- **LLM 容灾** — DeepSeek 主 API 超时或返回 5xx 时，自动切换到 SiliconFlow（Qwen2.5-7B）
+- **分布式追踪** — OpenTelemetry 全链路埋点，导出到 Jaeger（OTLP）并有 SQLite 兜底
+- **状态持久化** — PostgreSQL 驱动的 LangGraph Checkpointer 实现多轮对话记忆；无数据库时自动降级为无状态运行
+- **配置驱动** — YAML 运行参数 + XML 提示词注册表，修改行为无需动代码
+- **实时可观测** — SSE 驱动的推理路径（节点列表或 DAG 视图）、节点耗时、错误流和 Token 用量展示
+- **Markdown 渲染** — 完整 GFM 支持：表格、代码块、LaTeX 公式、列表
+
+---
+
+## 系统架构
 
 ```text
-User ──► Next.js (SSE consumer) ──► FastAPI /stream ──► LangGraph StateGraph
+用户 ──► Next.js (SSE 消费端) ──► FastAPI /stream ──► LangGraph StateGraph
                                                             │
-                              ┌─────────────────────────────┼──────────────────────┐
-                              ▼                             ▼                      ▼
-                         [academic]                    [planning]            [emotional]
-                      ┌──────┴──────┐                      │                      │
-                      ▼             ▼                       ▼                      ▼
-               rag_retrieve    web_search            search_policy       emotional_response
-               (ChromaDB       (DuckDuckGo)               │
-                +BM25+Rerank)       │                      ▼
-                      └──────┬──────┘               generate_plan ──► END
-                             ▼
-                       generate_answer
-                             │
-                             ▼
-                    evaluate_hallucination
-                       ┌─────┴────┐
-                    [retry]     [end]
-                       │
-                  academic_router (loop)
+                         ┌──────────────────────────────────┼───────────────────────┐
+                         ▼                                  ▼                       ▼
+                    [学科辅导]                           [学习规划]             [情绪支持]
+                  ┌──────┴──────┐                           │                       │
+                  ▼             ▼                            ▼                       ▼
+           rag_retrieve    web_search               search_policy        emotional_response
+           (向量+BM25        (DuckDuckGo)                  │
+            +Reranker)          │                           ▼
+                  └──────┬──────┘                    generate_plan ──► END
+                         ▼
+                   generate_answer
+                         │
+                         ▼
+              evaluate_hallucination
+                    ┌────┴────┐
+                 [重试]      [结束]
+                    │
+               academic_router（循环）
 ```
 
-Cross-cutting: `@traced_node` on every node → OpenTelemetry → Jaeger UI / SQLite.
-All nodes share `TutorState` as the single source of truth.
+横切关注点：所有节点上的 `@traced_node` → OpenTelemetry → Jaeger UI / SQLite
 
-See [`docs/architecture/v0.2.0/diagram_design.md`](docs/architecture/v0.2.0/diagram_design.md) for detailed Mermaid diagrams.
-
----
-
-## Tech Stack
-
-| Layer | Component | Detail |
-| ----- | --------- | ------ |
-| Frontend | Next.js 16 + Tailwind CSS 4 | Reactive chat UI, SSE consumer, Markdown renderer |
-| Backend API | FastAPI + Uvicorn | SSE endpoint (`POST /stream`), CORS, OTel auto-instrumentation |
-| Orchestration | LangGraph | StateGraph with fan-out/fan-in, conditional edges, retry loop |
-| Routing LLM | Qwen2.5-7B (SiliconFlow) | Lightweight intent classifier (temperature=0.0) |
-| Generation LLM | DeepSeek-V3 | Academic answers, study plans, emotional support |
-| LLM Fallback | Qwen2.5-7B (SiliconFlow) | Cross-provider failover on timeout / 5xx |
-| Vector Store | ChromaDB | Local knowledge retrieval with L2→relevance normalization |
-| Embedding | BAAI/bge-m3 (SiliconFlow) | Text vectorization for RAG |
-| Keyword Search | rank-bm25 + jieba | Chinese-aware BM25 retrieval |
-| Reranker | BAAI/bge-reranker-v2-m3 (SiliconFlow) | Cross-encoder reranking of merged candidates |
-| Web Search | DuckDuckGo | Online retrieval for study planner and academic fallback |
-| State Persistence | PostgreSQL (psycopg) | Multi-turn memory via LangGraph checkpointer |
-| Observability | OpenTelemetry + Jaeger + SQLite | Distributed tracing across all graph nodes |
-| Configuration | YAML + XML | Runtime settings and prompt templates |
+详细 Mermaid 架构图见 [`docs/architecture/v0.2.0/diagram_design.md`](docs/architecture/v0.2.0/diagram_design.md)
 
 ---
 
-## Quick Start
+## 技术选型
 
-### Prerequisites
+| 层级 | 组件 | 说明 |
+| ---- | ---- | ---- |
+| 前端 | Next.js 16 + Tailwind CSS 4 | 响应式聊天 UI、SSE 消费端、Markdown 渲染 |
+| 后端 API | FastAPI + Uvicorn | SSE 端点（`POST /stream`）、CORS、OTel 自动埋点 |
+| 编排 | LangGraph | 含 Fan-out/Fan-in、条件边和重试循环的 StateGraph |
+| 路由 LLM | Qwen2.5-7B（SiliconFlow） | 轻量意图分类器（temperature=0.0） |
+| 生成 LLM | DeepSeek-V3 | 学科解答、学习计划、情绪支持 |
+| LLM 容灾 | Qwen2.5-7B（SiliconFlow） | 跨厂商故障转移 |
+| 向量数据库 | ChromaDB | 本地知识库检索（L2→相关度归一化） |
+| 文本嵌入 | BAAI/bge-m3（SiliconFlow） | RAG 向量化 |
+| 关键词检索 | rank-bm25 + jieba | 中文感知 BM25 检索 |
+| 重排序 | BAAI/bge-reranker-v2-m3（SiliconFlow） | 合并候选集的精排 |
+| 网络搜索 | DuckDuckGo | 学习规划及学科问答的在线补充 |
+| 状态持久化 | PostgreSQL（psycopg） | LangGraph Checkpointer 多轮对话记忆 |
+| 可观测性 | OpenTelemetry + Jaeger + SQLite | 所有图节点的分布式链路追踪 |
+| 配置管理 | YAML + XML | 运行参数与提示词模板 |
+
+---
+
+## 快速启动
+
+### 环境要求
 
 - Python 3.11+
-- Node.js 18+ and npm
-- [Conda](https://docs.conda.io/) (recommended)
-- PostgreSQL (optional — state persistence; system runs stateless without it)
-- Jaeger 2.x (optional — trace visualization)
+- Node.js 18+ 和 npm
+- [Conda](https://docs.conda.io/)（推荐）
+- PostgreSQL（可选，用于状态持久化；不配置时自动降级为无状态）
+- Jaeger 2.x（可选，用于追踪可视化）
 
-### Backend Setup
+### 后端安装
 
 ```bash
 git clone https://github.com/<your-username>/gaokao_tutor.git
@@ -126,136 +125,132 @@ conda activate gaokao_tutor
 pip install -r requirements.txt
 
 cp .env.example .env
-# Fill in .env:
-#   DEEPSEEK_API_KEY        — DeepSeek API key (primary LLM)
-#   SILICONFLOW_API_KEY     — SiliconFlow key (embedding, reranker, routing LLM, fallback)
-#   DB_URI                  — PostgreSQL URI (optional)
+# 编辑 .env 填入以下配置：
+#   DEEPSEEK_API_KEY        — DeepSeek API 密钥（主力 LLM）
+#   SILICONFLOW_API_KEY     — SiliconFlow 密钥（嵌入、重排、路由 LLM、容灾）
+#   DB_URI                  — PostgreSQL URI（可选）
 ```
 
-### Build Knowledge Base
+### 构建知识库
 
-Place exam paper `.txt` / `.pdf` files under `data/chinese/` or `data/math/`, then:
+将高考试卷的 `.txt` / `.pdf` 文件放入 `data/chinese/` 或 `data/math/` 目录，然后：
 
 ```bash
 python scripts/build_index.py
 ```
 
-### Frontend Setup
+### 前端安装
 
 ```bash
 cd frontend
 npm install
 ```
 
-### Run
+### 启动
 
 ```bash
-# Terminal 1 — Backend
+# 终端 1 — 后端
 uvicorn app:app --reload --port 8000
 
-# Terminal 2 — Frontend
+# 终端 2 — 前端
 cd frontend
 npm run dev
 ```
 
-Frontend: `http://localhost:3000` · Backend API: `http://localhost:8000`
+前端地址：`http://localhost:3000` · 后端 API：`http://localhost:8000`
 
-### Optional: Jaeger Tracing
+### 可选：Jaeger 追踪
 
 ```bash
-# Traces visible at http://localhost:16686
+# 追踪界面：http://localhost:16686
 ./local_tools/jaeger-2.15.0-windows-amd64/jaeger.exe
 ```
 
 ---
 
-## Project Structure
+## 项目结构
 
 ```text
 gaokao_tutor/
-├── app.py                        # FastAPI SSE endpoint + lifespan (tracing, checkpointer, graph)
+├── app.py                        # FastAPI SSE 端点 + lifespan（追踪、Checkpointer、图初始化）
 ├── config/
-│   ├── settings.yaml             # Runtime parameters (temperatures, timeouts, retry limits)
-│   └── prompts/                  # XML prompt templates (8 files: supervisor, academic, planner,
-│                                 #   emotional, hallucination system/eval)
+│   ├── settings.yaml             # 运行参数（温度、超时、重试上限）
+│   └── prompts/                  # XML 提示词模板（8 个文件）
 ├── src/
 │   ├── graph/
-│   │   ├── builder.py            # Graph construction and compilation
-│   │   ├── state.py              # TutorState TypedDict (single source of truth)
-│   │   ├── supervisor.py         # Intent routing + keypoint extraction (Qwen2.5-7B)
-│   │   ├── academic.py           # Parallel retrieval, answer generation, hallucination eval
-│   │   ├── planner.py            # Policy search + study plan generation
-│   │   ├── emotional.py          # Emotional support
-│   │   └── llm.py                # Centralized LLM factory: get_node_llm(), invoke_with_fallback()
+│   │   ├── builder.py            # 图构建与编译
+│   │   ├── state.py              # TutorState TypedDict
+│   │   ├── supervisor.py         # 意图路由 + 关键词提取（Qwen2.5-7B）
+│   │   ├── academic.py           # 并行检索、答案生成、幻觉评估
+│   │   ├── planner.py            # 政策搜索 + 学习计划生成
+│   │   ├── emotional.py          # 情绪支持
+│   │   └── llm.py                # 统一 LLM 工厂：get_node_llm()、invoke_with_fallback()
 │   ├── rag/
-│   │   ├── loader.py             # PDF/TXT → chunked Documents
-│   │   ├── indexer.py            # ChromaDB index builder with dedup
-│   │   ├── retriever.py          # Hybrid retrieval: vector + BM25 + reranker
-│   │   └── reranker.py           # SiliconFlow BGE Reranker API wrapper
-│   ├── tools/                    # Search and RAG tool wrappers for graph nodes
-│   ├── config/                   # YAML settings loader + XML prompt cache (thread-safe)
-│   ├── database/                 # PostgreSQL checkpointer lifecycle
-│   ├── tracing/                  # OTel setup, @traced_node decorator, SQLite exporter
-│   └── schemas.py                # Pydantic request models
+│   │   ├── loader.py             # PDF/TXT → 分块 Document
+│   │   ├── indexer.py            # ChromaDB 索引构建（去重）
+│   │   ├── retriever.py          # 混合检索：向量 + BM25 + Reranker
+│   │   └── reranker.py           # SiliconFlow BGE Reranker API 封装
+│   ├── tools/                    # 图节点的搜索和 RAG 工具封装
+│   ├── config/                   # YAML 配置加载 + XML 提示词缓存（线程安全）
+│   ├── database/                 # PostgreSQL Checkpointer 生命周期管理
+│   ├── tracing/                  # OTel 初始化、@traced_node 装饰器、SQLite 导出器
+│   └── schemas.py                # Pydantic 请求模型
 ├── frontend/
-│   ├── app/page.tsx              # Main page: SSE consumer, state management
+│   ├── app/page.tsx              # 主页面：SSE 消费、状态管理
 │   └── components/
-│       ├── chat-area.tsx         # Message bubbles with Markdown rendering
-│       ├── right-panel.tsx       # Reasoning path (node trail + DAG), system logs, token usage
-│       └── left-sidebar.tsx      # Chat history
+│       ├── chat-area.tsx         # 消息气泡 + Markdown 渲染
+│       ├── right-panel.tsx       # 推理路径（节点列表 + DAG）、系统日志、Token 用量
+│       └── left-sidebar.tsx      # 对话历史
 ├── data/
-│   ├── chinese/                  # Exam papers: 2024 新课标 I/II, 2025 全国 I/II
-│   └── math/                     # Math exam papers (extend as needed)
+│   ├── chinese/                  # 语文试卷：2024 新课标 I/II、2025 全国 I/II
+│   └── math/                     # 数学试卷（按需扩充）
 ├── scripts/
-│   └── build_index.py            # Offline index builder
-├── tests/                        # 18 test modules, ~250+ test cases, all mocked
+│   └── build_index.py            # 离线索引构建脚本
+├── tests/                        # 18 个测试模块，250+ 测试用例，全部 Mock
 └── docs/
-    ├── architecture/
-    │   ├── DESIGN.md             # System design reference
-    │   ├── DIAGRAMS.md           # Legacy diagrams
-    │   └── v0.2.0/diagram_design.md  # v0.2.0 Mermaid architecture diagrams
-    └── requirements/RPD.md       # Requirements specification
+    └── architecture/
+        └── v0.2.0/diagram_design.md  # v0.2.0 Mermaid 架构图
 ```
 
 ---
 
-## Testing
+## 测试
 
 ```bash
-# Unit tests — no live API required (all mocked)
+# 单元测试 — 无需在线 API（全部 Mock）
 $env:OTEL_TRACING_ENABLED="false"
 python -m pytest tests/ --ignore=tests/test_integration.py -v --tb=short
 
-# Integration tests — requires valid .env + built chroma_store/
+# 集成测试 — 需要有效的 .env + 已构建的 chroma_store/
 python -m pytest tests/test_integration.py -v
 
-# Frontend build check
+# 前端构建检查
 cd frontend && npm run build
 ```
 
 ---
 
-## Known Limitations
+## 已知限制
 
-- **Supervisor knowledge cutoff**: The Qwen2.5-7B routing model may misclassify queries about specific past exams (e.g. "What was the 2024 Gaokao essay prompt?") as planning requests if its training data predates the event. Addressed in v0.3.0 via improved few-shot examples.
-- **RAG chunking**: Exam paper sections are split by character count, not by question type. The writing section (作文) may land in the same chunk as preceding questions, diluting retrieval precision. A section-aware chunking strategy is planned for v0.3.0.
-
----
-
-## Roadmap
-
-### v0.3.0 — Multi-Agent Planning & RAG Maturity
-
-| Feature | Priority | Description |
-| ------- | -------- | ----------- |
-| **Adversarial Plan Generation ** | HIGH | Multi-agent sub-graph for study plans: a Drafter agent generates a high-intensity plan, then a Study-Load Reviewer and an Emotional Reviewer audit it in parallel. Unanimous approval required or the plan is sent back for revision — an adversarial loop that produces balanced, student-aware plans. |
-| **Human-in-the-Loop Plan Review** | HIGH | After the adversarial loop converges, the graph suspends execution (LangGraph `interrupt`), presents the draft to the user for manual editing, then resumes with the approved version. |
-| **Section-Aware RAG Chunking** | HIGH | Replace `RecursiveCharacterTextSplitter` with a section-header-aware strategy (splitting on "一、现代文阅读" / "四、写作" etc.) to prevent exam composition prompts from being diluted in mixed chunks. |
-| **Supervisor Few-Shot Fix** | MED | Add few-shot examples for "historical exam lookup" queries to prevent the Qwen2.5-7B supervisor from misrouting due to training data knowledge cutoff. |
-| **Conversation-Level Rollback** | LOW | Leverage LangGraph checkpointer to list per-turn checkpoints and allow users to rollback to a previous conversation state. |
+- **Supervisor 知识截止日期**：Qwen2.5-7B 的训练数据截止于 2024 年 6 月之前，查询已发生考试题目时（如"2024 年高考作文标题"）可能被误判为备考规划意图。v0.3.0 将通过改进 few-shot 示例修复。
+- **RAG 分块策略**：试卷按字符数分块，作文（写作）题目可能与前序题目混入同一 chunk，导致检索精度下降。v0.3.0 计划引入感知节标题的分块策略。
 
 ---
 
-## License
+## 版本路线图
+
+### v0.3.0 — 多智能体规划 & RAG 成熟度
+
+| 特性 | 优先级 | 描述 |
+| ---- | ------ | ---- |
+| **对抗式计划生成** | 高 | 学习计划子图引入多智能体博弈：一个"起草者"生成高强度初版计划，"学情审查员"和"情绪审查员"并行审阅，全票通过才放行，否则打回重写——通过对抗循环产出真正平衡、体贴学生的计划 |
+| **人工介入计划审批** | 高 | 对抗循环收敛后，图执行挂起（LangGraph `interrupt`），将草稿推送到前端供用户手动编辑，确认后再恢复执行 |
+| **感知节标题的 RAG 分块** | 高 | 用节标题感知策略（按"一、现代文阅读"/"四、写作"等切割）替代 `RecursiveCharacterTextSplitter`，避免作文题被稀释在混合 chunk 中 |
+| **Supervisor Few-Shot 修复** | 中 | 为"查询历届真题"类查询补充 few-shot 示例，避免 Qwen2.5-7B 因知识截止日期导致误判 |
+| **对话级回滚** | 低 | 利用 LangGraph Checkpointer 列出各轮对话快照，允许用户回退到之前的对话状态 |
+
+---
+
+## 许可证
 
 MIT
