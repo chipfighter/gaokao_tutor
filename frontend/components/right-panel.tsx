@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 // ── Exported types consumed by page.tsx ────────────────────────────
 
 export interface LogEntry {
-  type: "info" | "error" | "warning"
+  type: "info" | "error" | "warning" | "perf" | "usage"
   message: string
   ts: string
 }
@@ -19,11 +19,13 @@ export interface NodeEvent {
   status: "running" | "done"
   ts: string
   endTs?: string
+  durationMs?: number
 }
 
 interface RightPanelProps {
   logs: LogEntry[]
   nodeEvents: NodeEvent[]
+  tokenUsage: { input: number; output: number; total: number }
 }
 
 // ── Human-readable node labels ─────────────────────────────────────
@@ -42,7 +44,7 @@ const NODE_LABELS: Record<string, string> = {
 
 // ── Main component ─────────────────────────────────────────────────
 
-export function RightPanel({ logs, nodeEvents }: RightPanelProps) {
+export function RightPanel({ logs, nodeEvents, tokenUsage }: RightPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(true)
   const logsEndRef = useRef<HTMLDivElement>(null)
 
@@ -110,6 +112,18 @@ export function RightPanel({ logs, nodeEvents }: RightPanelProps) {
             </ScrollArea>
           </div>
 
+          {/* Token Usage Counter */}
+          {tokenUsage.total > 0 && (
+            <div className="px-4 py-2 pl-12 border-b border-border bg-[#F5F3E8]/50">
+              <p className="text-xs font-mono text-[#3D5A40]">
+                Tokens: {tokenUsage.total}
+                <span className="text-muted-foreground ml-1">
+                  (in: {tokenUsage.input} / out: {tokenUsage.output})
+                </span>
+              </p>
+            </div>
+          )}
+
           {/* System Logs - 30% height */}
           <div className="flex-[3] flex flex-col overflow-hidden min-h-0">
             <div className="px-4 py-3">
@@ -124,7 +138,9 @@ export function RightPanel({ logs, nodeEvents }: RightPanelProps) {
                       "text-xs font-mono py-1 px-2 rounded flex gap-2",
                       log.type === "error" && "text-[#D97B6C] bg-[#D97B6C]/10",
                       log.type === "info" && "text-muted-foreground bg-[#F5F3E8]",
-                      log.type === "warning" && "text-[#B8860B] bg-[#FFCC99]/20"
+                      log.type === "warning" && "text-[#B8860B] bg-[#FFCC99]/20",
+                      log.type === "perf" && "text-[#4A90D9] bg-[#4A90D9]/10",
+                      log.type === "usage" && "text-[#8B5CF6] bg-[#8B5CF6]/10"
                     )}
                   >
                     <span className="opacity-50 shrink-0">{log.ts}</span>
@@ -171,7 +187,9 @@ function TraversalNode({ event }: { event: NodeEvent }) {
         {label}
       </div>
       <div className="text-[10px] opacity-60 mt-0.5">
-        {isRunning ? event.ts : `${event.ts} → ${event.endTs ?? ""}`}
+        {isRunning
+          ? event.ts
+          : `${event.ts} → ${event.endTs ?? ""}${event.durationMs != null ? ` (${event.durationMs}ms)` : ""}`}
       </div>
     </div>
   )

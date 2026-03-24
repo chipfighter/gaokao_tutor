@@ -20,12 +20,14 @@ export default function Home() {
     { type: "info", message: "[INFO] System initialized.", ts: timestamp() },
   ])
   const [nodeEvents, setNodeEvents] = useState<NodeEvent[]>([])
+  const [tokenUsage, setTokenUsage] = useState({ input: 0, output: 0, total: 0 })
 
   const handleNewChat = useCallback(() => {
     setSelectedChatId(undefined)
     setMessages([])
     setNodeEvents([])
     setLogs([{ type: "info", message: "[INFO] New chat session started.", ts: timestamp() }])
+    setTokenUsage({ input: 0, output: 0, total: 0 })
   }, [])
 
   const handleSelectChat = useCallback((id: string) => {
@@ -43,6 +45,7 @@ export default function Home() {
 
     setMessages((prev) => [...prev, userMessage])
     setNodeEvents([])
+    setTokenUsage({ input: 0, output: 0, total: 0 })
     setLogs((prev) => [
       ...prev,
       { type: "info" as const, message: `[INFO] User query: ${content.slice(0, 60)}`, ts: timestamp() },
@@ -111,7 +114,7 @@ export default function Home() {
                   // Mark matching node as done
                   return prev.map((e) =>
                     e.node === node && e.status === "running"
-                      ? { ...e, status: "done", endTs: now }
+                      ? { ...e, status: "done", endTs: now, durationMs: data.duration_ms ?? undefined }
                       : e
                   )
                 })
@@ -121,6 +124,36 @@ export default function Home() {
                 setLogs((prev) => [
                   ...prev,
                   { type: "info", message: `[INFO] ${label} node: ${node}`, ts: now },
+                ])
+
+                // Perf log for end events with duration
+                if (status === "end" && data.duration_ms != null) {
+                  setLogs((prev) => [
+                    ...prev,
+                    { type: "perf", message: `[PERF] Node "${node}" completed in ${data.duration_ms}ms`, ts: now },
+                  ])
+                }
+
+                // Error log for end events with error
+                if (status === "end" && data.error) {
+                  setLogs((prev) => [
+                    ...prev,
+                    { type: "error", message: `[ERROR] Node "${node}": ${data.error}`, ts: now },
+                  ])
+                }
+              }
+
+              // -- Token usage event: accumulate and log --
+              if (data.type === "usage") {
+                const now = timestamp()
+                setTokenUsage((prev) => ({
+                  input: prev.input + (data.input_tokens ?? 0),
+                  output: prev.output + (data.output_tokens ?? 0),
+                  total: prev.total + (data.total_tokens ?? 0),
+                }))
+                setLogs((prev) => [
+                  ...prev,
+                  { type: "usage", message: `[USAGE] ${data.node}: ${data.input_tokens} in / ${data.output_tokens} out`, ts: now },
                 ])
               }
             } catch {
@@ -167,7 +200,7 @@ export default function Home() {
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
       />
-      <RightPanel logs={logs} nodeEvents={nodeEvents} />
+      <RightPanel logs={logs} nodeEvents={nodeEvents} tokenUsage={tokenUsage} />
     </div>
   )
 }
