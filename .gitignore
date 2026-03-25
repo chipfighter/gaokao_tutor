@@ -46,3 +46,6 @@ frontend/%TEMP%/
 # local binary tools
 jaeger*
 *-windows-amd64/
+
+# agentic coding prompts design(Local design)
+context_prompts/
