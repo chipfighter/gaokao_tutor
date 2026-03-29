@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from src.config import get_setting, load_prompt
 from src.graph.llm import async_invoke_with_fallback, get_fallback_llm, get_node_llm
-from src.graph.state import TutorState
+from src.graph.state import CONTEXT_CLEAR, TutorState
 from src.rag.retriever import retrieve
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_retrieval, traced_search
@@ -52,8 +52,37 @@ def _last_human_query(state: TutorState) -> str:
 
 @traced_node
 async def academic_router(state: TutorState) -> dict:
-    """No-op router node that enables parallel fan-out to retrieval nodes."""
+    """Router node for parallel fan-out. Clears context on retry path."""
+    if state.get("retry_count", 0) > 0:
+        return {"context": CONTEXT_CLEAR}
     return {}
+
+
+# ── Node 0b: query rewriting (retry path only) ──────────────────
+
+@traced_node
+async def rewrite_query(state: TutorState) -> dict:
+    """Rewrite the user's query using hallucination feedback for better retrieval."""
+    original_query = _last_human_query(state)
+    reason = state.get("hallucination_reason", "")
+
+    llm = get_node_llm("supervisor")
+    rewrite_prompt = load_prompt("rewrite_query").format(
+        original_query=original_query,
+        hallucination_reason=reason,
+    )
+
+    try:
+        response = await llm.ainvoke([
+            SystemMessage(content="你是一个查询改写助手。根据反馈改进用户的搜索查询。"),
+            HumanMessage(content=rewrite_prompt),
+        ])
+        rewritten = response.content.strip()
+    except Exception:
+        logger.warning("Query rewrite failed, using original query")
+        rewritten = original_query
+
+    return {"rewritten_query": rewritten}
 
 
 # ── Node 1: RAG retrieval (parallel branch A) ─────────────────────
@@ -61,9 +90,16 @@ async def academic_router(state: TutorState) -> dict:
 @traced_node
 async def rag_retrieve(state: TutorState) -> dict:
     """Query ChromaDB with keypoints extracted by the supervisor node."""
+    rewritten = state.get("rewritten_query", "")
     keypoints = state.get("keypoints", [])
     subject = state.get("subject")
-    query = " ".join(keypoints) if keypoints else _last_human_query(state)
+
+    if rewritten:
+        query = rewritten
+    elif keypoints:
+        query = " ".join(keypoints)
+    else:
+        query = _last_human_query(state)
 
     subj = subject if subject != "other" else None
 
@@ -86,7 +122,8 @@ _SEARCH_TIMEOUT = get_setting("academic.search_timeout", 15)
 @traced_node
 async def web_search(state: TutorState) -> dict:
     """Fan-out web search — runs in parallel with rag_retrieve."""
-    query = _last_human_query(state)
+    rewritten = state.get("rewritten_query", "")
+    query = rewritten if rewritten else _last_human_query(state)
 
     with traced_search(query=query, timeout=_SEARCH_TIMEOUT) as span:
         try:
@@ -221,6 +258,7 @@ async def evaluate_hallucination(state: TutorState) -> dict:
     result: dict = {"hallucination_detected": hallucination_detected}
     if hallucination_detected:
         result["retry_count"] = retry_count + 1
+        result["hallucination_reason"] = evaluation.reason
 
     return result
 

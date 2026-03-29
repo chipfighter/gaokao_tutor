@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<prompt><![CDATA[原始问题：{original_query}
+
+上次回答的问题：{hallucination_reason}
+
+请根据上述反馈，改写原始问题，使其更加精确、具体，以便检索到更相关的参考资料。
+只输出改写后的问题，不要输出其他内容。]]></prompt>

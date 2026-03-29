@@ -157,6 +157,58 @@ class TestEvaluateHallucinationNode:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
+    async def test_stores_hallucination_reason(self, mock_get_llm, mock_get_fallback):
+        """When hallucination detected, reason is stored in state."""
+        mock_llm = MagicMock()
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
+            is_faithful=False, reason="Fabricated formula not in context",
+        ))
+        mock_llm.with_structured_output.return_value = mock_structured
+        mock_get_llm.return_value = mock_llm
+
+        mock_fallback = MagicMock()
+        mock_fallback.with_structured_output.return_value = MagicMock()
+        mock_get_fallback.return_value = mock_fallback
+
+        state = {
+            "messages": [HumanMessage(content="q"), AIMessage(content="bad")],
+            "context": [],
+            "retry_count": 0,
+        }
+
+        result = await evaluate_hallucination(state)
+
+        assert result["hallucination_reason"] == "Fabricated formula not in context"
+
+    @patch("src.graph.academic.get_fallback_llm")
+    @patch("src.graph.academic.get_node_llm")
+    async def test_no_reason_when_faithful(self, mock_get_llm, mock_get_fallback):
+        """When answer is faithful, hallucination_reason should not be set."""
+        mock_llm = MagicMock()
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
+            is_faithful=True, reason="Good answer",
+        ))
+        mock_llm.with_structured_output.return_value = mock_structured
+        mock_get_llm.return_value = mock_llm
+
+        mock_fallback = MagicMock()
+        mock_fallback.with_structured_output.return_value = MagicMock()
+        mock_get_fallback.return_value = mock_fallback
+
+        state = {
+            "messages": [HumanMessage(content="q"), AIMessage(content="a")],
+            "context": [],
+            "retry_count": 0,
+        }
+
+        result = await evaluate_hallucination(state)
+
+        assert "hallucination_reason" not in result
+
+    @patch("src.graph.academic.get_fallback_llm")
+    @patch("src.graph.academic.get_node_llm")
     async def test_extracts_last_human_message_as_question(
         self, mock_get_llm, mock_get_fallback,
     ):

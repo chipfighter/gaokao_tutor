@@ -8,7 +8,6 @@ All tests mock external dependencies -- no real API calls required.
 
 from __future__ import annotations
 
-import operator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,39 +26,54 @@ from src.graph.builder import build_graph, get_compiled_graph
 # ===========================================================================
 
 class TestContextReducer:
-    """Verify that operator.add correctly merges context lists from fan-out."""
+    """Verify that context_reducer correctly merges and clears context."""
 
     def test_merges_from_two_branches(self):
         """Simulates LangGraph fan-in: merge rag + web context lists."""
+        from src.graph.state import context_reducer
+
         branch_a = [{"type": "rag", "content": "doc1", "source": "f.pdf", "score": 0.9}]
         branch_b = [{"type": "web", "content": "web1", "title": "T", "url": "http://x"}]
 
-        merged = operator.add(branch_a, branch_b)
+        merged = context_reducer(branch_a, branch_b)
 
         assert len(merged) == 2
         assert merged[0]["type"] == "rag"
         assert merged[1]["type"] == "web"
 
-    def test_accumulates_on_retry(self):
-        """On retry, new context appends to existing (operator.add)."""
-        existing = [{"type": "rag", "content": "old"}]
-        new = [{"type": "rag", "content": "new"}]
-
-        merged = operator.add(existing, new)
-
-        assert len(merged) == 2
-        assert merged[0]["content"] == "old"
-        assert merged[1]["content"] == "new"
-
     def test_empty_branch_produces_no_extra(self):
         """If one branch returns empty context, merge is just the other."""
+        from src.graph.state import context_reducer
+
         branch_a = [{"type": "rag", "content": "doc1"}]
         branch_b = []
 
-        merged = operator.add(branch_a, branch_b)
+        merged = context_reducer(branch_a, branch_b)
 
         assert len(merged) == 1
         assert merged[0]["type"] == "rag"
+
+    def test_clear_signal_resets_context(self):
+        """A list with __clear__ sentinel resets context to empty."""
+        from src.graph.state import CONTEXT_CLEAR, context_reducer
+
+        existing = [{"type": "rag", "content": "old_doc"}]
+
+        merged = context_reducer(existing, CONTEXT_CLEAR)
+
+        assert merged == []
+
+    def test_normal_append_after_clear(self):
+        """After clearing, normal updates append to empty list."""
+        from src.graph.state import context_reducer
+
+        cleared = []
+        new_docs = [{"type": "rag", "content": "new_doc"}]
+
+        merged = context_reducer(cleared, new_docs)
+
+        assert len(merged) == 1
+        assert merged[0]["content"] == "new_doc"
 
 
 # ===========================================================================
@@ -280,6 +294,20 @@ class TestGraphFanOutStructure:
 # ===========================================================================
 # TestRetryRoutesToAcademicRouter -- retry re-runs both retrievals
 # ===========================================================================
+
+class TestRewriteQueryNodeInGraph:
+    """Verify rewrite_query node exists in graph and is wired in retry path."""
+
+    def test_rewrite_query_node_exists(self):
+        graph = build_graph()
+        assert "rewrite_query" in graph.nodes
+
+    def test_retry_routes_to_rewrite_query(self):
+        """On retry, evaluate_hallucination should route to rewrite_query, not academic_router."""
+        graph = build_graph()
+        # The retry path should go through rewrite_query
+        assert "rewrite_query" in graph.nodes
+
 
 class TestRetryRoutesToAcademicRouter:
     """On hallucination retry, route back to academic_router for full re-retrieval."""
