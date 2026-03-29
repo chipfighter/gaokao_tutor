@@ -26,9 +26,11 @@ class TestBuildGraph:
             "web_search",
             "generate_answer",
             "evaluate_hallucination",
+            "rewrite_query",
             "search_policy",
             "generate_plan",
             "emotional_response",
+            "handle_unknown",
         }
         assert expected.issubset(node_names), f"Missing nodes: {expected - node_names}"
 

@@ -16,7 +16,7 @@ from src.graph.academic import (
 from src.graph.emotional import emotional_response
 from src.graph.planner import generate_plan, search_policy
 from src.graph.state import TutorState
-from src.graph.supervisor import route_by_intent, supervisor_node
+from src.graph.supervisor import handle_unknown, route_by_intent, supervisor_node
 
 
 def build_graph() -> StateGraph:
@@ -43,6 +43,9 @@ def build_graph() -> StateGraph:
     # Emotional
     graph.add_node("emotional_response", emotional_response)
 
+    # Unknown / off-topic
+    graph.add_node("handle_unknown", handle_unknown)
+
     # ── Edges ────────────────────────────────────────────────────────
     graph.set_entry_point("supervisor")
 
@@ -54,6 +57,7 @@ def build_graph() -> StateGraph:
             "academic": "academic_router",
             "planning": "search_policy",
             "emotional": "emotional_response",
+            "unknown": "handle_unknown",
         },
     )
 
@@ -83,6 +87,9 @@ def build_graph() -> StateGraph:
 
     # Emotional — direct to END
     graph.add_edge("emotional_response", END)
+
+    # Unknown — direct to END
+    graph.add_edge("handle_unknown", END)
 
     return graph
 

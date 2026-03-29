@@ -412,7 +412,7 @@ class TestSettingsValues:
         from src.config import get_setting
 
         intents = get_setting("supervisor.valid_intents")
-        assert set(intents) == {"academic", "planning", "emotional"}
+        assert set(intents) == {"academic", "planning", "emotional", "unknown"}
 
 
 # ===========================================================================
