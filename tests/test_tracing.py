@@ -425,6 +425,85 @@ class TestTracedNodeDecorator:
 
 
 # ===========================================================================
+# TestTracedNodeDecoratorAsync -- async node support
+# ===========================================================================
+
+class TestTracedNodeDecoratorAsync:
+    """Tests for the @traced_node decorator with async node functions."""
+
+    async def test_preserves_function_name_async(self, in_memory_exporter):
+        from src.tracing.decorators import traced_node
+
+        @traced_node
+        async def my_async_node(state):
+            return {"intent": "academic"}
+
+        assert my_async_node.__name__ == "my_async_node"
+
+    async def test_returns_original_result_async(self, in_memory_exporter):
+        from src.tracing.decorators import traced_node
+
+        @traced_node
+        async def my_async_node(state):
+            return {"intent": "academic", "subject": "math"}
+
+        result = await my_async_node({"messages": []})
+        assert result == {"intent": "academic", "subject": "math"}
+
+    async def test_creates_span_with_node_name_async(self, in_memory_exporter):
+        from src.tracing.decorators import traced_node
+
+        @traced_node
+        async def supervisor_node(state):
+            return {"intent": "academic"}
+
+        await supervisor_node({"messages": []})
+
+        spans = in_memory_exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].name == "graph.node.supervisor_node"
+
+    async def test_records_output_keys_async(self, in_memory_exporter):
+        from src.tracing.decorators import traced_node
+
+        @traced_node
+        async def my_async_node(state):
+            return {"intent": "academic", "context": [1, 2]}
+
+        await my_async_node({"messages": []})
+
+        spans = in_memory_exporter.get_finished_spans()
+        output_keys = spans[0].attributes["graph.node.output_keys"]
+        assert "intent" in output_keys
+        assert "context" in output_keys
+
+    async def test_reraises_exception_async(self, in_memory_exporter):
+        from src.tracing.decorators import traced_node
+
+        @traced_node
+        async def failing_node(state):
+            raise ValueError("async error")
+
+        with pytest.raises(ValueError, match="async error"):
+            await failing_node({})
+
+    async def test_records_exception_on_span_async(self, in_memory_exporter):
+        from src.tracing.decorators import traced_node
+
+        @traced_node
+        async def failing_node(state):
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError):
+            await failing_node({})
+
+        spans = in_memory_exporter.get_finished_spans()
+        assert spans[0].status.status_code == StatusCode.ERROR
+        assert len(spans[0].events) > 0
+        assert spans[0].events[0].name == "exception"
+
+
+# ===========================================================================
 # TestTracedLlmCall
 # ===========================================================================
 

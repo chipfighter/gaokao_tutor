@@ -9,7 +9,7 @@ All tests mock external dependencies -- no real API calls required.
 from __future__ import annotations
 
 import operator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -69,19 +69,19 @@ class TestContextReducer:
 class TestAcademicRouterNode:
     """academic_router is a no-op node that enables fan-out."""
 
-    def test_returns_empty_dict(self):
+    async def test_returns_empty_dict(self):
         state = {
             "messages": [HumanMessage(content="test")],
             "keypoints": ["test"],
             "subject": "math",
         }
-        result = academic_router(state)
+        result = await academic_router(state)
         assert result == {}
 
-    def test_is_traced(self, in_memory_exporter):
+    async def test_is_traced(self, in_memory_exporter):
         """Should create an OTel span for Jaeger visibility."""
         state = {"messages": [HumanMessage(content="test")]}
-        academic_router(state)
+        await academic_router(state)
 
         spans = in_memory_exporter.get_finished_spans()
         node_spans = [s for s in spans if s.name == "graph.node.academic_router"]
@@ -96,7 +96,7 @@ class TestRagRetrieveParallelOutput:
     """rag_retrieve returns context entries tagged type='rag'."""
 
     @patch("src.graph.academic.retrieve")
-    def test_returns_context_with_rag_type(self, mock_retrieve):
+    async def test_returns_context_with_rag_type(self, mock_retrieve):
         mock_retrieve.return_value = {
             "docs": [{"content": "判别式", "source": "math.pdf", "score": 0.9}],
         }
@@ -106,7 +106,7 @@ class TestRagRetrieveParallelOutput:
             "keypoints": ["判别式"],
             "subject": "math",
         }
-        result = rag_retrieve(state)
+        result = await rag_retrieve(state)
 
         assert "context" in result
         assert len(result["context"]) == 1
@@ -115,7 +115,7 @@ class TestRagRetrieveParallelOutput:
         assert result["context"][0]["source"] == "math.pdf"
 
     @patch("src.graph.academic.retrieve")
-    def test_empty_retrieval_returns_empty_context(self, mock_retrieve):
+    async def test_empty_retrieval_returns_empty_context(self, mock_retrieve):
         mock_retrieve.return_value = {"docs": []}
 
         state = {
@@ -123,12 +123,12 @@ class TestRagRetrieveParallelOutput:
             "keypoints": ["test"],
             "subject": "math",
         }
-        result = rag_retrieve(state)
+        result = await rag_retrieve(state)
 
         assert result["context"] == []
 
     @patch("src.graph.academic.retrieve")
-    def test_uses_last_human_message_when_no_keypoints(self, mock_retrieve):
+    async def test_uses_last_human_message_when_no_keypoints(self, mock_retrieve):
         """On retry, fallback query should find last HumanMessage."""
         mock_retrieve.return_value = {"docs": []}
 
@@ -140,7 +140,7 @@ class TestRagRetrieveParallelOutput:
             "keypoints": [],
             "subject": "math",
         }
-        rag_retrieve(state)
+        await rag_retrieve(state)
 
         mock_retrieve.assert_called_once_with(query="original question", subject="math")
 
@@ -153,13 +153,13 @@ class TestWebSearchParallelOutput:
     """web_search returns context entries tagged type='web'."""
 
     @patch("src.graph.academic.web_search_fn")
-    def test_returns_context_with_web_type(self, mock_search):
+    async def test_returns_context_with_web_type(self, mock_search):
         mock_search.return_value = [
             {"content": "result", "title": "Title", "url": "http://x"},
         ]
 
         state = {"messages": [HumanMessage(content="量子力学")]}
-        result = web_search(state)
+        result = await web_search(state)
 
         assert "context" in result
         assert len(result["context"]) == 1
@@ -168,14 +168,14 @@ class TestWebSearchParallelOutput:
         assert result["context"][0]["title"] == "Title"
 
     @patch("src.graph.academic.web_search_fn", side_effect=Exception("network"))
-    def test_returns_empty_context_on_exception(self, mock_search):
+    async def test_returns_empty_context_on_exception(self, mock_search):
         state = {"messages": [HumanMessage(content="test")]}
-        result = web_search(state)
+        result = await web_search(state)
 
         assert result["context"] == []
 
     @patch("src.graph.academic.web_search_fn")
-    def test_uses_last_human_message_for_query(self, mock_search):
+    async def test_uses_last_human_message_for_query(self, mock_search):
         """During retry, web_search must find the original question."""
         mock_search.return_value = []
 
@@ -185,7 +185,7 @@ class TestWebSearchParallelOutput:
                 AIMessage(content="previous bad answer"),
             ],
         }
-        web_search(state)
+        await web_search(state)
 
         mock_search.assert_called_once_with("the real question")
 
@@ -199,11 +199,11 @@ class TestGenerateAnswerFromMergedContext:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_uses_both_rag_and_web_context(
+    async def test_uses_both_rag_and_web_context(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_llm_response("combined answer")
+        mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response("combined answer"))
         mock_get_llm.return_value = mock_llm
         mock_get_fallback.return_value = MagicMock()
 
@@ -217,23 +217,23 @@ class TestGenerateAnswerFromMergedContext:
 
         from src.graph.academic import generate_answer
 
-        result = generate_answer(state)
+        result = await generate_answer(state)
 
         assert len(result["messages"]) == 1
         assert isinstance(result["messages"][0], AIMessage)
         # Verify the prompt includes both RAG and web content
-        call_args = mock_llm.invoke.call_args[0][0]
+        call_args = mock_llm.ainvoke.call_args[0][0]
         prompt_text = call_args[-1].content
         assert "Δ=b²-4ac" in prompt_text
         assert "判别式用法" in prompt_text
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_handles_empty_context(
+    async def test_handles_empty_context(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_llm_response("answer without context")
+        mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response("answer without context"))
         mock_get_llm.return_value = mock_llm
         mock_get_fallback.return_value = MagicMock()
 
@@ -244,7 +244,7 @@ class TestGenerateAnswerFromMergedContext:
 
         from src.graph.academic import generate_answer
 
-        result = generate_answer(state)
+        result = await generate_answer(state)
 
         assert len(result["messages"]) == 1
 
@@ -273,9 +273,6 @@ class TestGraphFanOutStructure:
     def test_should_web_search_not_in_graph(self):
         """Sequential should_web_search replaced by parallel fan-out."""
         graph = build_graph()
-        # should_web_search was a conditional edge function, not a node.
-        # Verify the old conditional edge target mapping is gone by checking
-        # that both rag_retrieve and web_search are direct nodes (no conditional).
         assert "rag_retrieve" in graph.nodes
         assert "web_search" in graph.nodes
 

@@ -1,20 +1,20 @@
 """Unit tests for LLM fallback/resilience mechanism.
 
-Tests cover: invoke_with_fallback helper, per-node fallback behavior,
-and tracing attributes on failover events.
+Tests cover: invoke_with_fallback helper, async_invoke_with_fallback helper,
+per-node fallback behavior, and tracing attributes on failover events.
 All tests mock LLM invocations — no real API calls required.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 
 # ===========================================================================
-# TestInvokeWithFallback — core helper
+# TestInvokeWithFallback — sync core helper (kept for backward compat)
 # ===========================================================================
 
 class TestInvokeWithFallback:
@@ -160,6 +160,76 @@ class TestInvokeWithFallback:
 
 
 # ===========================================================================
+# TestAsyncInvokeWithFallback — async core helper
+# ===========================================================================
+
+class TestAsyncInvokeWithFallback:
+    """Unit tests for async_invoke_with_fallback()."""
+
+    async def test_returns_primary_response_on_success(self):
+        from src.graph.llm import async_invoke_with_fallback
+
+        primary = MagicMock()
+        primary.ainvoke = AsyncMock(return_value="primary-ok")
+
+        result = await async_invoke_with_fallback(primary, ["msg"])
+        assert result == "primary-ok"
+
+    async def test_sets_fallback_used_false_on_success(self):
+        from src.graph.llm import async_invoke_with_fallback
+
+        primary = MagicMock()
+        primary.ainvoke = AsyncMock(return_value="ok")
+        span = MagicMock()
+
+        await async_invoke_with_fallback(primary, ["msg"], span=span)
+        span.set_attribute.assert_called_with("llm.fallback_used", False)
+
+    async def test_falls_back_on_timeout_error(self):
+        from src.graph.llm import async_invoke_with_fallback
+
+        primary = MagicMock()
+        primary.ainvoke = AsyncMock(side_effect=TimeoutError("timed out"))
+        fallback = MagicMock()
+        fallback.ainvoke = AsyncMock(return_value="fallback-ok")
+
+        result = await async_invoke_with_fallback(primary, ["msg"], fallback=fallback)
+        assert result == "fallback-ok"
+
+    async def test_falls_back_on_connection_error(self):
+        from src.graph.llm import async_invoke_with_fallback
+
+        primary = MagicMock()
+        primary.ainvoke = AsyncMock(side_effect=ConnectionError("refused"))
+        fallback = MagicMock()
+        fallback.ainvoke = AsyncMock(return_value="fallback-ok")
+
+        result = await async_invoke_with_fallback(primary, ["msg"], fallback=fallback)
+        assert result == "fallback-ok"
+
+    async def test_propagates_error_when_no_fallback(self):
+        from src.graph.llm import async_invoke_with_fallback
+
+        primary = MagicMock()
+        primary.ainvoke = AsyncMock(side_effect=TimeoutError("timed out"))
+
+        with pytest.raises(TimeoutError):
+            await async_invoke_with_fallback(primary, ["msg"])
+
+    async def test_does_not_catch_value_error(self):
+        from src.graph.llm import async_invoke_with_fallback
+
+        primary = MagicMock()
+        primary.ainvoke = AsyncMock(side_effect=ValueError("bad input"))
+        fallback = MagicMock()
+
+        with pytest.raises(ValueError):
+            await async_invoke_with_fallback(primary, ["msg"], fallback=fallback)
+
+        fallback.ainvoke.assert_not_called()
+
+
+# ===========================================================================
 # TestGenerateAnswerFallback — academic node
 # ===========================================================================
 
@@ -168,15 +238,15 @@ class TestGenerateAnswerFallback:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_uses_fallback_on_primary_timeout(
+    async def test_uses_fallback_on_primary_timeout(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         primary = MagicMock()
-        primary.invoke.side_effect = TimeoutError("primary timed out")
+        primary.ainvoke = AsyncMock(side_effect=TimeoutError("primary timed out"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
-        fallback.invoke.return_value = mock_llm_response("fallback answer")
+        fallback.ainvoke = AsyncMock(return_value=mock_llm_response("fallback answer"))
         mock_get_fallback.return_value = fallback
 
         state = {
@@ -186,18 +256,18 @@ class TestGenerateAnswerFallback:
 
         from src.graph.academic import generate_answer
 
-        result = generate_answer(state)
+        result = await generate_answer(state)
 
         assert "fallback answer" in result["messages"][0].content
-        fallback.invoke.assert_called_once()
+        fallback.ainvoke.assert_called_once()
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_returns_primary_when_healthy(
+    async def test_returns_primary_when_healthy(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         primary = MagicMock()
-        primary.invoke.return_value = mock_llm_response("primary answer")
+        primary.ainvoke = AsyncMock(return_value=mock_llm_response("primary answer"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
@@ -210,10 +280,10 @@ class TestGenerateAnswerFallback:
 
         from src.graph.academic import generate_answer
 
-        result = generate_answer(state)
+        result = await generate_answer(state)
 
         assert "primary answer" in result["messages"][0].content
-        fallback.invoke.assert_not_called()
+        fallback.ainvoke.assert_not_called()
 
 
 # ===========================================================================
@@ -225,15 +295,15 @@ class TestGeneratePlanFallback:
 
     @patch("src.graph.planner.get_fallback_llm")
     @patch("src.graph.planner.get_node_llm")
-    def test_uses_fallback_on_primary_timeout(
+    async def test_uses_fallback_on_primary_timeout(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         primary = MagicMock()
-        primary.invoke.side_effect = TimeoutError("primary timed out")
+        primary.ainvoke = AsyncMock(side_effect=TimeoutError("primary timed out"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
-        fallback.invoke.return_value = mock_llm_response("fallback plan")
+        fallback.ainvoke = AsyncMock(return_value=mock_llm_response("fallback plan"))
         mock_get_fallback.return_value = fallback
 
         state = {
@@ -243,18 +313,18 @@ class TestGeneratePlanFallback:
 
         from src.graph.planner import generate_plan
 
-        result = generate_plan(state)
+        result = await generate_plan(state)
 
         assert "fallback plan" in result["messages"][0].content
-        fallback.invoke.assert_called_once()
+        fallback.ainvoke.assert_called_once()
 
     @patch("src.graph.planner.get_fallback_llm")
     @patch("src.graph.planner.get_node_llm")
-    def test_returns_primary_when_healthy(
+    async def test_returns_primary_when_healthy(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         primary = MagicMock()
-        primary.invoke.return_value = mock_llm_response("primary plan")
+        primary.ainvoke = AsyncMock(return_value=mock_llm_response("primary plan"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
@@ -267,10 +337,10 @@ class TestGeneratePlanFallback:
 
         from src.graph.planner import generate_plan
 
-        result = generate_plan(state)
+        result = await generate_plan(state)
 
         assert "primary plan" in result["messages"][0].content
-        fallback.invoke.assert_not_called()
+        fallback.ainvoke.assert_not_called()
 
 
 # ===========================================================================
@@ -282,33 +352,33 @@ class TestEmotionalResponseFallback:
 
     @patch("src.graph.emotional.get_fallback_llm")
     @patch("src.graph.emotional.get_node_llm")
-    def test_uses_fallback_on_primary_timeout(
+    async def test_uses_fallback_on_primary_timeout(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         primary = MagicMock()
-        primary.invoke.side_effect = TimeoutError("primary timed out")
+        primary.ainvoke = AsyncMock(side_effect=TimeoutError("primary timed out"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
-        fallback.invoke.return_value = mock_llm_response("fallback comfort")
+        fallback.ainvoke = AsyncMock(return_value=mock_llm_response("fallback comfort"))
         mock_get_fallback.return_value = fallback
 
         state = {"messages": [HumanMessage(content="我好焦虑")]}
 
         from src.graph.emotional import emotional_response
 
-        result = emotional_response(state)
+        result = await emotional_response(state)
 
         assert "fallback comfort" in result["messages"][0].content
-        fallback.invoke.assert_called_once()
+        fallback.ainvoke.assert_called_once()
 
     @patch("src.graph.emotional.get_fallback_llm")
     @patch("src.graph.emotional.get_node_llm")
-    def test_returns_primary_when_healthy(
+    async def test_returns_primary_when_healthy(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         primary = MagicMock()
-        primary.invoke.return_value = mock_llm_response("primary comfort")
+        primary.ainvoke = AsyncMock(return_value=mock_llm_response("primary comfort"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
@@ -318,10 +388,10 @@ class TestEmotionalResponseFallback:
 
         from src.graph.emotional import emotional_response
 
-        result = emotional_response(state)
+        result = await emotional_response(state)
 
         assert "primary comfort" in result["messages"][0].content
-        fallback.invoke.assert_not_called()
+        fallback.ainvoke.assert_not_called()
 
 
 # ===========================================================================
@@ -333,18 +403,18 @@ class TestFallbackTracing:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_span_records_fallback_attributes(
+    async def test_span_records_fallback_attributes(
         self, mock_get_llm, mock_get_fallback,
         in_memory_exporter, mock_llm_response,
     ):
         """When fallback triggers, the llm.invoke span must record it."""
         primary = MagicMock()
-        primary.invoke.side_effect = TimeoutError("timed out")
+        primary.ainvoke = AsyncMock(side_effect=TimeoutError("timed out"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
         fallback.model_name = "deepseek-lite"
-        fallback.invoke.return_value = mock_llm_response("traced fallback")
+        fallback.ainvoke = AsyncMock(return_value=mock_llm_response("traced fallback"))
         mock_get_fallback.return_value = fallback
 
         state = {
@@ -354,7 +424,7 @@ class TestFallbackTracing:
 
         from src.graph.academic import generate_answer
 
-        generate_answer(state)
+        await generate_answer(state)
 
         spans = in_memory_exporter.get_finished_spans()
         llm_spans = [s for s in spans if s.name.startswith("llm.invoke")]
@@ -371,13 +441,13 @@ class TestFallbackTracing:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_span_records_no_fallback_on_success(
+    async def test_span_records_no_fallback_on_success(
         self, mock_get_llm, mock_get_fallback,
         in_memory_exporter, mock_llm_response,
     ):
         """When primary succeeds, span should record llm.fallback_used=False."""
         primary = MagicMock()
-        primary.invoke.return_value = mock_llm_response("primary ok")
+        primary.ainvoke = AsyncMock(return_value=mock_llm_response("primary ok"))
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
@@ -390,7 +460,7 @@ class TestFallbackTracing:
 
         from src.graph.academic import generate_answer
 
-        generate_answer(state)
+        await generate_answer(state)
 
         spans = in_memory_exporter.get_finished_spans()
         llm_spans = [s for s in spans if s.name.startswith("llm.invoke")]

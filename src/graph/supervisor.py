@@ -20,7 +20,7 @@ _VALID_INTENTS = set(get_setting("supervisor.valid_intents", ["academic", "plann
 
 
 @traced_node
-def supervisor_node(state: TutorState) -> dict:
+async def supervisor_node(state: TutorState) -> dict:
     """Classify intent, detect subject, and extract keypoints in one LLM call.
 
     Returns:
@@ -38,7 +38,7 @@ def supervisor_node(state: TutorState) -> dict:
         node_name="supervisor",
         temperature=temperature,
     ):
-        response = llm.invoke([
+        response = await llm.ainvoke([
             SystemMessage(content=load_prompt("supervisor_system")),
             HumanMessage(content=user_text),
         ])

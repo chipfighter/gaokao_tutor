@@ -14,14 +14,14 @@ Future Roadmap:
 
 from __future__ import annotations
 
+import asyncio
 import os
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from src.config import get_setting, load_prompt
-from src.graph.llm import get_fallback_llm, get_node_llm, invoke_with_fallback
+from src.graph.llm import async_invoke_with_fallback, get_fallback_llm, get_node_llm
 from src.graph.state import TutorState
 from src.tools.search_tool import search as web_search_fn
 from src.tracing import traced_llm_call, traced_node, traced_search
@@ -34,19 +34,20 @@ _SEARCH_TIMEOUT = get_setting("planner.search_timeout", 15)
 
 
 @traced_node
-def search_policy(state: TutorState) -> dict:
+async def search_policy(state: TutorState) -> dict:
     """Use DuckDuckGo to fetch the latest Gaokao policy information. Times out after 15s."""
     year = datetime.now().year
     query = f"{year}年高考最新政策 考试时间安排 科目改革"
 
     with traced_search(query=query, timeout=_SEARCH_TIMEOUT) as span:
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(web_search_fn, query)
-                search_results = future.result(timeout=_SEARCH_TIMEOUT)
+            search_results = await asyncio.wait_for(
+                asyncio.to_thread(web_search_fn, query),
+                timeout=_SEARCH_TIMEOUT,
+            )
             span.set_attribute("search.result_count", len(search_results))
             span.set_attribute("search.timed_out", False)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             search_results = []
             span.set_attribute("search.result_count", 0)
             span.set_attribute("search.timed_out", True)
@@ -61,7 +62,7 @@ def search_policy(state: TutorState) -> dict:
 # ── Node 2: generate complete plan ────────────────────────────────
 
 @traced_node
-def generate_plan(state: TutorState) -> dict:
+async def generate_plan(state: TutorState) -> dict:
     """Produce a complete study plan from user request + policy context in one LLM call."""
     llm = get_node_llm("planner")
 
@@ -91,7 +92,7 @@ def generate_plan(state: TutorState) -> dict:
         node_name="generate_plan",
         temperature=temperature,
     ) as span:
-        response = invoke_with_fallback(
+        response = await async_invoke_with_fallback(
             llm, messages, fallback=fallback, span=span,
         )
 

@@ -438,16 +438,18 @@ class TestNodeConfigIntegration:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_generate_answer_uses_config_prompt(
+    async def test_generate_answer_uses_config_prompt(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         """generate_answer should use prompt loaded from XML config."""
+        from unittest.mock import AsyncMock
+
         from langchain_core.messages import HumanMessage
 
         from src.graph.academic import generate_answer
 
         mock_llm = mock_get_llm.return_value
-        mock_llm.invoke.return_value = mock_llm_response("answer")
+        mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response("answer"))
         mock_get_fallback.return_value = mock_llm
 
         state = {
@@ -455,14 +457,15 @@ class TestNodeConfigIntegration:
             "context": [{"type": "rag", "content": "doc"}],
         }
 
-        result = generate_answer(state)
+        result = await generate_answer(state)
 
         assert "answer" in result["messages"][0].content
 
     @patch("src.graph.supervisor.get_node_llm")
-    def test_supervisor_uses_config_prompt(self, mock_get_llm):
+    async def test_supervisor_uses_config_prompt(self, mock_get_llm):
         """supervisor_node should use prompt loaded from XML config."""
         import json
+        from unittest.mock import AsyncMock
 
         from langchain_core.messages import HumanMessage
 
@@ -474,9 +477,9 @@ class TestNodeConfigIntegration:
                 "intent": "academic", "subject": "math", "keypoints": ["test"],
             }),
         })()
-        mock_llm.invoke.return_value = mock_resp
+        mock_llm.ainvoke = AsyncMock(return_value=mock_resp)
 
         state = {"messages": [HumanMessage(content="test")]}
-        result = supervisor_node(state)
+        result = await supervisor_node(state)
 
         assert result["intent"] == "academic"

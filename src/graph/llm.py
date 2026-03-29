@@ -143,3 +143,51 @@ def invoke_with_fallback(primary, messages, *, fallback=None, span=None):
             )
 
         return fallback.invoke(messages)
+
+
+async def async_invoke_with_fallback(primary, messages, *, fallback=None, span=None):
+    """Async version of invoke_with_fallback; uses ainvoke() throughout.
+
+    Args:
+        primary: Primary ChatModel (or structured output chain) instance.
+        messages: Message list passed to ``ainvoke()``.
+        fallback: Optional fallback ChatModel. ``None`` → error propagates.
+        span: Optional OTel span for recording fallback metadata.
+
+    Returns:
+        The LLM response from whichever model succeeded.
+
+    Raises:
+        The original error when no fallback is configured, or the fallback
+        error when both models fail.
+    """
+    try:
+        response = await primary.ainvoke(messages)
+        if span is not None:
+            span.set_attribute("llm.fallback_used", False)
+        return response
+    except _FALLBACK_ERRORS as exc:
+        if fallback is None:
+            raise
+
+        logger.warning(
+            "Primary LLM failed (%s: %s), falling back",
+            type(exc).__name__,
+            exc,
+        )
+
+        if span is not None:
+            span.set_attribute("llm.fallback_used", True)
+            span.set_attribute(
+                "llm.fallback_model",
+                getattr(fallback, "model_name", "unknown"),
+            )
+            span.add_event(
+                "llm.fallback_triggered",
+                {
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
+
+        return await fallback.ainvoke(messages)

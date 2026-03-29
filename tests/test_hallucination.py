@@ -8,7 +8,7 @@ All tests mock LLM invocations -- no real API calls required.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -52,13 +52,13 @@ class TestEvaluateHallucinationNode:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_faithful_answer_not_flagged(self, mock_get_llm, mock_get_fallback):
+    async def test_faithful_answer_not_flagged(self, mock_get_llm, mock_get_fallback):
         """Faithful answer -> hallucination_detected=False, no retry_count change."""
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.return_value = HallucinationEvaluation(
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=True, reason="Good",
-        )
+        ))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -72,20 +72,20 @@ class TestEvaluateHallucinationNode:
             "retry_count": 0,
         }
 
-        result = evaluate_hallucination(state)
+        result = await evaluate_hallucination(state)
 
         assert result["hallucination_detected"] is False
         assert "retry_count" not in result
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_unfaithful_answer_detected(self, mock_get_llm, mock_get_fallback):
+    async def test_unfaithful_answer_detected(self, mock_get_llm, mock_get_fallback):
         """Hallucinating answer -> hallucination_detected=True, retry_count incremented."""
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.return_value = HallucinationEvaluation(
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=False, reason="Fabricated",
-        )
+        ))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -99,20 +99,20 @@ class TestEvaluateHallucinationNode:
             "retry_count": 0,
         }
 
-        result = evaluate_hallucination(state)
+        result = await evaluate_hallucination(state)
 
         assert result["hallucination_detected"] is True
         assert result["retry_count"] == 1
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_increments_retry_count(self, mock_get_llm, mock_get_fallback):
+    async def test_increments_retry_count(self, mock_get_llm, mock_get_fallback):
         """retry_count=1 + hallucination -> retry_count=2."""
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.return_value = HallucinationEvaluation(
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=False, reason="Off-topic",
-        )
+        ))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -126,18 +126,18 @@ class TestEvaluateHallucinationNode:
             "retry_count": 1,
         }
 
-        result = evaluate_hallucination(state)
+        result = await evaluate_hallucination(state)
 
         assert result["hallucination_detected"] is True
         assert result["retry_count"] == 2
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_defaults_to_valid_on_parse_failure(self, mock_get_llm, mock_get_fallback):
+    async def test_defaults_to_valid_on_parse_failure(self, mock_get_llm, mock_get_fallback):
         """Structured output parsing fails -> default to valid (don't block answer)."""
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.side_effect = Exception("OutputParserException")
+        mock_structured.ainvoke = AsyncMock(side_effect=Exception("OutputParserException"))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -151,21 +151,21 @@ class TestEvaluateHallucinationNode:
             "retry_count": 0,
         }
 
-        result = evaluate_hallucination(state)
+        result = await evaluate_hallucination(state)
 
         assert result["hallucination_detected"] is False
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_extracts_last_human_message_as_question(
+    async def test_extracts_last_human_message_as_question(
         self, mock_get_llm, mock_get_fallback,
     ):
         """Should use the last HumanMessage as the question, not the last message."""
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.return_value = HallucinationEvaluation(
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=True, reason="OK",
-        )
+        ))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -183,10 +183,10 @@ class TestEvaluateHallucinationNode:
             "retry_count": 1,
         }
 
-        evaluate_hallucination(state)
+        await evaluate_hallucination(state)
 
         # The eval prompt sent to the structured LLM should contain the question
-        call_args = mock_structured.invoke.call_args[0][0]
+        call_args = mock_structured.ainvoke.call_args[0][0]
         prompt_text = call_args[-1].content
         assert "the real question" in prompt_text
 
@@ -236,14 +236,14 @@ class TestHallucinationTracing:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_span_records_hallucination_detected(
+    async def test_span_records_hallucination_detected(
         self, mock_get_llm, mock_get_fallback, in_memory_exporter,
     ):
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.return_value = HallucinationEvaluation(
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=False, reason="Bad",
-        )
+        ))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -257,7 +257,7 @@ class TestHallucinationTracing:
             "retry_count": 0,
         }
 
-        evaluate_hallucination(state)
+        await evaluate_hallucination(state)
 
         spans = in_memory_exporter.get_finished_spans()
         node_spans = [s for s in spans if s.name == "graph.node.evaluate_hallucination"]
@@ -267,14 +267,14 @@ class TestHallucinationTracing:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_span_records_retry_count(
+    async def test_span_records_retry_count(
         self, mock_get_llm, mock_get_fallback, in_memory_exporter,
     ):
         mock_llm = MagicMock()
         mock_structured = MagicMock()
-        mock_structured.invoke.return_value = HallucinationEvaluation(
+        mock_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=False, reason="Bad",
-        )
+        ))
         mock_llm.with_structured_output.return_value = mock_structured
         mock_get_llm.return_value = mock_llm
 
@@ -288,7 +288,7 @@ class TestHallucinationTracing:
             "retry_count": 1,
         }
 
-        evaluate_hallucination(state)
+        await evaluate_hallucination(state)
 
         spans = in_memory_exporter.get_finished_spans()
         node_spans = [s for s in spans if s.name == "graph.node.evaluate_hallucination"]
@@ -306,18 +306,18 @@ class TestEvaluateHallucinationFallback:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_uses_fallback_on_primary_timeout(self, mock_get_llm, mock_get_fallback):
+    async def test_uses_fallback_on_primary_timeout(self, mock_get_llm, mock_get_fallback):
         primary = MagicMock()
         primary_structured = MagicMock()
-        primary_structured.invoke.side_effect = TimeoutError("timed out")
+        primary_structured.ainvoke = AsyncMock(side_effect=TimeoutError("timed out"))
         primary.with_structured_output.return_value = primary_structured
         mock_get_llm.return_value = primary
 
         fallback = MagicMock()
         fallback_structured = MagicMock()
-        fallback_structured.invoke.return_value = HallucinationEvaluation(
+        fallback_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=True, reason="Fallback OK",
-        )
+        ))
         fallback.with_structured_output.return_value = fallback_structured
         mock_get_fallback.return_value = fallback
 
@@ -327,19 +327,19 @@ class TestEvaluateHallucinationFallback:
             "retry_count": 0,
         }
 
-        result = evaluate_hallucination(state)
+        result = await evaluate_hallucination(state)
 
         assert result["hallucination_detected"] is False
-        fallback_structured.invoke.assert_called_once()
+        fallback_structured.ainvoke.assert_called_once()
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_returns_primary_when_healthy(self, mock_get_llm, mock_get_fallback):
+    async def test_returns_primary_when_healthy(self, mock_get_llm, mock_get_fallback):
         primary = MagicMock()
         primary_structured = MagicMock()
-        primary_structured.invoke.return_value = HallucinationEvaluation(
+        primary_structured.ainvoke = AsyncMock(return_value=HallucinationEvaluation(
             is_faithful=True, reason="Primary OK",
-        )
+        ))
         primary.with_structured_output.return_value = primary_structured
         mock_get_llm.return_value = primary
 
@@ -354,10 +354,10 @@ class TestEvaluateHallucinationFallback:
             "retry_count": 0,
         }
 
-        result = evaluate_hallucination(state)
+        result = await evaluate_hallucination(state)
 
         assert result["hallucination_detected"] is False
-        fallback_structured.invoke.assert_not_called()
+        fallback_structured.ainvoke.assert_not_called()
 
 
 # ===========================================================================
@@ -369,13 +369,13 @@ class TestGenerateAnswerRetryCompat:
 
     @patch("src.graph.academic.get_fallback_llm")
     @patch("src.graph.academic.get_node_llm")
-    def test_uses_last_human_message_not_last_message(
+    async def test_uses_last_human_message_not_last_message(
         self, mock_get_llm, mock_get_fallback, mock_llm_response,
     ):
         """On retry, messages include previous AI answers.
         generate_answer should find the user's original question."""
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = mock_llm_response("new answer")
+        mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response("new answer"))
         mock_get_llm.return_value = mock_llm
 
         mock_fallback = MagicMock()
@@ -391,10 +391,10 @@ class TestGenerateAnswerRetryCompat:
 
         from src.graph.academic import generate_answer
 
-        generate_answer(state)
+        await generate_answer(state)
 
         # Verify the prompt contains the human question, not the AI answer
-        call_args = mock_llm.invoke.call_args[0][0]
+        call_args = mock_llm.ainvoke.call_args[0][0]
         human_msgs = [m for m in call_args if isinstance(m, HumanMessage)]
         prompt_text = " ".join(m.content for m in human_msgs)
         assert "What is the discriminant?" in prompt_text

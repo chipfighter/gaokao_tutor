@@ -8,15 +8,15 @@ rag_retrieve and web_search in parallel.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from src.config import get_setting, load_prompt
-from src.graph.llm import get_fallback_llm, get_node_llm, invoke_with_fallback
+from src.graph.llm import async_invoke_with_fallback, get_fallback_llm, get_node_llm
 from src.graph.state import TutorState
 from src.rag.retriever import retrieve
 from src.tools.search_tool import search as web_search_fn
@@ -51,7 +51,7 @@ def _last_human_query(state: TutorState) -> str:
 # ── Node 0: academic router (fan-out trigger) ─────────────────────
 
 @traced_node
-def academic_router(state: TutorState) -> dict:
+async def academic_router(state: TutorState) -> dict:
     """No-op router node that enables parallel fan-out to retrieval nodes."""
     return {}
 
@@ -59,7 +59,7 @@ def academic_router(state: TutorState) -> dict:
 # ── Node 1: RAG retrieval (parallel branch A) ─────────────────────
 
 @traced_node
-def rag_retrieve(state: TutorState) -> dict:
+async def rag_retrieve(state: TutorState) -> dict:
     """Query ChromaDB with keypoints extracted by the supervisor node."""
     keypoints = state.get("keypoints", [])
     subject = state.get("subject")
@@ -84,18 +84,19 @@ _SEARCH_TIMEOUT = get_setting("academic.search_timeout", 15)
 
 
 @traced_node
-def web_search(state: TutorState) -> dict:
+async def web_search(state: TutorState) -> dict:
     """Fan-out web search — runs in parallel with rag_retrieve."""
     query = _last_human_query(state)
 
     with traced_search(query=query, timeout=_SEARCH_TIMEOUT) as span:
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(web_search_fn, query)
-                search_results = future.result(timeout=_SEARCH_TIMEOUT)
+            search_results = await asyncio.wait_for(
+                asyncio.to_thread(web_search_fn, query),
+                timeout=_SEARCH_TIMEOUT,
+            )
             span.set_attribute("search.result_count", len(search_results))
             span.set_attribute("search.timed_out", False)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             search_results = []
             span.set_attribute("search.result_count", 0)
             span.set_attribute("search.timed_out", True)
@@ -128,7 +129,7 @@ def _format_search(results: list[dict]) -> str:
 
 
 @traced_node
-def generate_answer(state: TutorState) -> dict:
+async def generate_answer(state: TutorState) -> dict:
     """Synthesize final answer from merged context (RAG + web) via LLM."""
     llm = get_node_llm("academic")
 
@@ -157,7 +158,7 @@ def generate_answer(state: TutorState) -> dict:
         node_name="generate_answer",
         temperature=temperature,
     ) as span:
-        response = invoke_with_fallback(
+        response = await async_invoke_with_fallback(
             llm, messages, fallback=fallback, span=span,
         )
 
@@ -167,7 +168,7 @@ def generate_answer(state: TutorState) -> dict:
 # ── Node 4: hallucination evaluation (reflection loop) ─────────
 
 @traced_node
-def evaluate_hallucination(state: TutorState) -> dict:
+async def evaluate_hallucination(state: TutorState) -> dict:
     """Evaluate whether the generated answer hallucinates beyond retrieved context.
 
     Uses structured LLM output to judge faithfulness. On detection,
@@ -201,7 +202,7 @@ def evaluate_hallucination(state: TutorState) -> dict:
         temperature=eval_temp,
     ) as span:
         try:
-            evaluation = invoke_with_fallback(
+            evaluation = await async_invoke_with_fallback(
                 structured_primary,
                 [
                     SystemMessage(content=load_prompt("hallucination_system")),

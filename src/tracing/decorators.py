@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import time
 from contextlib import contextmanager
@@ -14,18 +15,64 @@ from src.tracing.collector import get_tracer
 
 
 # ---------------------------------------------------------------------------
-# @traced_node — wraps LangGraph node functions
+# @traced_node — wraps LangGraph node functions (sync and async)
 # ---------------------------------------------------------------------------
 
 def traced_node(func: Callable) -> Callable:
     """Decorator that wraps a LangGraph node function with an OpenTelemetry span.
 
+    Supports both synchronous and asynchronous node functions.
     Records: node name, execution duration, input/output state keys,
     and any exceptions as span events.
     """
 
+    def _record_result(span, result):
+        if isinstance(result, dict):
+            span.set_attribute("graph.node.output_keys", str(list(result.keys())))
+
+            if "intent" in result:
+                span.set_attribute("graph.node.intent", result["intent"])
+            if "subject" in result:
+                span.set_attribute("graph.node.subject", result["subject"])
+            if "keypoints" in result:
+                span.set_attribute("graph.node.keypoint_count", len(result["keypoints"]))
+            if "context" in result:
+                span.set_attribute("graph.node.context_count", len(result["context"]))
+            if "search_results" in result:
+                span.set_attribute("graph.node.search_result_count", len(result["search_results"]))
+            if "messages" in result:
+                span.set_attribute("graph.node.message_count", len(result["messages"]))
+            if "retry_count" in result:
+                span.set_attribute("graph.node.retry_count", result["retry_count"])
+            if "hallucination_detected" in result:
+                span.set_attribute("graph.node.hallucination_detected", result["hallucination_detected"])
+
+        span.set_status(StatusCode.OK)
+
+    if asyncio.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def async_wrapper(state: dict, *args: Any, **kwargs: Any) -> dict:
+            tracer = get_tracer()
+            with tracer.start_as_current_span(
+                f"graph.node.{func.__name__}",
+                attributes={
+                    "graph.node.name": func.__name__,
+                    "graph.node.input_keys": str(list(state.keys())),
+                },
+            ) as span:
+                try:
+                    result = await func(state, *args, **kwargs)
+                    _record_result(span, result)
+                    return result
+                except Exception as exc:
+                    span.set_status(StatusCode.ERROR, str(exc))
+                    span.record_exception(exc)
+                    raise
+
+        return async_wrapper
+
     @functools.wraps(func)
-    def wrapper(state: dict, *args: Any, **kwargs: Any) -> dict:
+    def sync_wrapper(state: dict, *args: Any, **kwargs: Any) -> dict:
         tracer = get_tracer()
         with tracer.start_as_current_span(
             f"graph.node.{func.__name__}",
@@ -36,36 +83,14 @@ def traced_node(func: Callable) -> Callable:
         ) as span:
             try:
                 result = func(state, *args, **kwargs)
-
-                if isinstance(result, dict):
-                    span.set_attribute("graph.node.output_keys", str(list(result.keys())))
-
-                    if "intent" in result:
-                        span.set_attribute("graph.node.intent", result["intent"])
-                    if "subject" in result:
-                        span.set_attribute("graph.node.subject", result["subject"])
-                    if "keypoints" in result:
-                        span.set_attribute("graph.node.keypoint_count", len(result["keypoints"]))
-                    if "context" in result:
-                        span.set_attribute("graph.node.context_count", len(result["context"]))
-                    if "search_results" in result:
-                        span.set_attribute("graph.node.search_result_count", len(result["search_results"]))
-                    if "messages" in result:
-                        span.set_attribute("graph.node.message_count", len(result["messages"]))
-                    if "retry_count" in result:
-                        span.set_attribute("graph.node.retry_count", result["retry_count"])
-                    if "hallucination_detected" in result:
-                        span.set_attribute("graph.node.hallucination_detected", result["hallucination_detected"])
-
-                span.set_status(StatusCode.OK)
+                _record_result(span, result)
                 return result
-
             except Exception as exc:
                 span.set_status(StatusCode.ERROR, str(exc))
                 span.record_exception(exc)
                 raise
 
-    return wrapper
+    return sync_wrapper
 
 
 # ---------------------------------------------------------------------------

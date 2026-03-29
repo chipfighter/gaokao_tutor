@@ -7,13 +7,13 @@ import os
 from langchain_core.messages import AIMessage, SystemMessage
 
 from src.config import get_setting, load_prompt
-from src.graph.llm import get_fallback_llm, get_node_llm, invoke_with_fallback
+from src.graph.llm import async_invoke_with_fallback, get_fallback_llm, get_node_llm
 from src.graph.state import TutorState
 from src.tracing import traced_llm_call, traced_node
 
 
 @traced_node
-def emotional_response(state: TutorState) -> dict:
+async def emotional_response(state: TutorState) -> dict:
     """Respond with warm, practical emotional support."""
     llm = get_node_llm("emotional")
 
@@ -29,7 +29,7 @@ def emotional_response(state: TutorState) -> dict:
         node_name="emotional_response",
         temperature=temperature,
     ) as span:
-        response = invoke_with_fallback(
+        response = await async_invoke_with_fallback(
             llm, history, fallback=fallback, span=span,
         )
 
